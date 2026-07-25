@@ -43,3 +43,20 @@ test('serializes a nested document with the vmap header', () => {
   expect(text).toContain('"ids" "int_array" \n\t[\n\t\t"7",\n\t\t"8"\n\t]')
   expect(text.endsWith('\n')).toBe(true)
 })
+
+test('rejects magnitudes toFixed would render in exponent notation', () => {
+  expect(() => formatFloat(1e21)).toThrow(RangeError)
+  expect(() => formatFloat(-1e21)).toThrow(RangeError)
+  expect(() => formatFloat(Infinity)).toThrow(RangeError)
+  expect(() => formatFloat(NaN)).toThrow(RangeError)
+  // just under the threshold still serializes as plain decimal
+  expect(formatFloat(9.99e20)).not.toContain('e')
+  expect(formatFloat(Number.MAX_SAFE_INTEGER)).toBe('9007199254740991')
+})
+
+test('throws on an unhandled attribute kind rather than dropping it', () => {
+  const bad = element('CMapWorld', 'id-0', [
+    ['mystery', { kind: 'nonexistent', value: 1 } as never],
+  ])
+  expect(() => serializeDocument(bad)).toThrow(/unhandled DmxValue kind/)
+})

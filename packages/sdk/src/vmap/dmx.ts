@@ -31,6 +31,11 @@ export function formatFloat(n: number): string {
   if (!Number.isFinite(n)) {
     throw new RangeError(`cannot serialize non-finite number: ${n}`)
   }
+  // toFixed reverts to exponent notation at this magnitude, which Valve's
+  // parser cannot read. No real map coordinate comes near it.
+  if (Math.abs(n) >= 1e21) {
+    throw new RangeError(`number too large to serialize as plain decimal: ${n}`)
+  }
   const v = Object.is(n, -0) ? 0 : n
   const s = v.toFixed(10).replace(/0+$/, '').replace(/\.$/, '')
   return s === '-0' ? '0' : s
@@ -99,7 +104,6 @@ function writeElement(el: DmxElement, depth: number, out: string[]): void {
     }
 
     if (value.kind === 'element_array') {
-      // element_array: children are written inline, in order.
       out.push(`${inner}"${name}" "element_array" `)
       out.push(`${inner}[`)
       value.value.forEach((child, i) => {
@@ -108,7 +112,12 @@ function writeElement(el: DmxElement, depth: number, out: string[]): void {
         if (i < value.value.length - 1) out[out.length - 1] += ','
       })
       out.push(`${inner}]`)
+      continue
     }
+
+    throw new Error(
+      `unhandled DmxValue kind "${(value as DmxValue).kind}" for attribute "${name}"`,
+    )
   }
 
   out.push(`${pad}}`)
