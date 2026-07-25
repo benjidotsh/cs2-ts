@@ -9,7 +9,6 @@
     "noUncheckedIndexedAccess": true,
     "exactOptionalPropertyTypes": true,
     "noEmit": true,
-    "skipLibCheck": true,
-    "composite": true
+    "skipLibCheck": true
   }
 }

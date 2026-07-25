@@ -4,7 +4,7 @@
   "type": "module",
   "workspaces": ["packages/*"],
   "scripts": {
-    "typecheck": "tsc --build",
+    "typecheck": "tsc --noEmit",
     "test": "bun test"
   },
   "devDependencies": {

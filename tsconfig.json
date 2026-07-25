@@ -1,7 +1,4 @@
 {
-  "files": [],
-  "references": [
-    { "path": "packages/sdk" },
-    { "path": "packages/cli" }
-  ]
+  "extends": "./tsconfig.base.json",
+  "include": ["packages/*/src", "packages/*/test"]
 }
