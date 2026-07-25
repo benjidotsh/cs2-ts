@@ -1,0 +1,10 @@
+{
+  "name": "@cs2-ts/cli",
+  "version": "0.1.0",
+  "type": "module",
+  "bin": { "cs2ts": "./src/index.ts" },
+  "dependencies": {
+    "@cs2-ts/sdk": "workspace:*",
+    "commander": "15.0.0"
+  }
+}
