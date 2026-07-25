@@ -1,21 +1,21 @@
 <!-- dmx encoding keyvalues2 4 format vmap 40 -->
 "CMapRootElement"
 {
-	"id" "elementid" "59e1e862-ca7d-4de2-b078-0b36b6108234"
+	"id" "elementid" "55e799f5-e7e9-4650-8083-7bfdace58734"
 	"isprefab" "bool" "0"
 	"editorbuild" "int" "10112"
 	"editorversion" "int" "400"
 	"itemFile" "string" ""
 	"defaultcamera" "CStoredCamera"
 	{
-		"id" "elementid" "e0e4ce6c-c254-4d9f-a50d-9af4bb9c772e"
+		"id" "elementid" "c5a48b6c-6b51-4e3e-a01f-2a3822ff6f58"
 		"position" "vector3" "0 -1000 1000"
 		"lookat" "vector3" "0 0 0"
 	}
 
 	"3dcameras" "CStoredCameras"
 	{
-		"id" "elementid" "7dcd599f-1d95-4b0c-b29e-ee17b69c4d6b"
+		"id" "elementid" "c3e17f80-23a1-494c-a65f-dbc944e0af1f"
 		"activecamera" "int" "-1"
 		"cameras" "element_array" 
 		[
@@ -24,7 +24,7 @@
 
 	"world" "CMapWorld"
 	{
-		"id" "elementid" "388a833d-92b8-4df7-ba18-8bc636f98524"
+		"id" "elementid" "e0e4ce6c-c254-4d9f-a50d-9af4bb9c772e"
 		"nodeID" "int" "1"
 		"referenceID" "uint64" "0x0"
 		"children" "element_array" 
@@ -466,13 +466,73 @@
 
 					"faceData" "CDmePolygonMeshDataArray"
 					{
-						"id" "elementid" "43d5583c-1ccc-4424-89d1-52d75635e574"
+						"id" "elementid" "7b42de93-2791-412a-9353-9e4755517942"
 						"size" "int" "6"
 						"streams" "element_array" 
 						[
 							"CDmePolygonMeshDataStream"
 							{
 								"id" "elementid" "d8b57106-2f06-4ce3-b50d-dae19660a519"
+								"name" "string" "textureScale:0"
+								"standardAttributeName" "string" "textureScale"
+								"semanticName" "string" "textureScale"
+								"semanticIndex" "int" "0"
+								"vertexBufferLocation" "int" "0"
+								"dataStateFlags" "int" "0"
+								"subdivisionBinding" "element" ""
+								"data" "vector2_array" 
+								[
+									"0.25 0.25",
+									"0.25 0.25",
+									"0.25 0.25",
+									"0.25 0.25",
+									"0.25 0.25",
+									"0.25 0.25"
+								]
+							},
+							"CDmePolygonMeshDataStream"
+							{
+								"id" "elementid" "e52ecb92-fe54-4240-96fa-3ef4d0346bf3"
+								"name" "string" "textureAxisU:0"
+								"standardAttributeName" "string" "textureAxisU"
+								"semanticName" "string" "textureAxisU"
+								"semanticIndex" "int" "0"
+								"vertexBufferLocation" "int" "0"
+								"dataStateFlags" "int" "0"
+								"subdivisionBinding" "element" ""
+								"data" "vector4_array" 
+								[
+									"1 0 0 0",
+									"1 0 0 0",
+									"1 0 0 0",
+									"0 1 0 0",
+									"-1 0 0 0",
+									"0 -1 0 0"
+								]
+							},
+							"CDmePolygonMeshDataStream"
+							{
+								"id" "elementid" "43d5583c-1ccc-4424-89d1-52d75635e574"
+								"name" "string" "textureAxisV:0"
+								"standardAttributeName" "string" "textureAxisV"
+								"semanticName" "string" "textureAxisV"
+								"semanticIndex" "int" "0"
+								"vertexBufferLocation" "int" "0"
+								"dataStateFlags" "int" "0"
+								"subdivisionBinding" "element" ""
+								"data" "vector4_array" 
+								[
+									"0 1 0 0",
+									"0 -1 0 0",
+									"0 0 -1 0",
+									"0 0 -1 0",
+									"0 0 -1 0",
+									"0 0 -1 0"
+								]
+							},
+							"CDmePolygonMeshDataStream"
+							{
+								"id" "elementid" "bfc84336-c2d8-4dff-a784-c75275926d3b"
 								"name" "string" "materialindex:0"
 								"standardAttributeName" "string" "materialindex"
 								"semanticName" "string" "materialindex"
@@ -492,7 +552,7 @@
 							},
 							"CDmePolygonMeshDataStream"
 							{
-								"id" "elementid" "e52ecb92-fe54-4240-96fa-3ef4d0346bf3"
+								"id" "elementid" "88be414c-8b0a-4271-ad93-e666487b36d1"
 								"name" "string" "flags:0"
 								"standardAttributeName" "string" "flags"
 								"semanticName" "string" "flags"
@@ -509,15 +569,51 @@
 									"0",
 									"0"
 								]
+							},
+							"CDmePolygonMeshDataStream"
+							{
+								"id" "elementid" "32b5aab3-e8f6-4f2e-9d56-5616e43d1095"
+								"name" "string" "lightmapScaleBias:0"
+								"standardAttributeName" "string" "lightmapScaleBias"
+								"semanticName" "string" "lightmapScaleBias"
+								"semanticIndex" "int" "0"
+								"vertexBufferLocation" "int" "0"
+								"dataStateFlags" "int" "1"
+								"subdivisionBinding" "element" ""
+								"data" "int_array" 
+								[
+									"0",
+									"0",
+									"0",
+									"0",
+									"0",
+									"0"
+								]
 							}
 						]
 					}
 
 					"subdivisionData" "CDmePolygonMeshSubdivisionData"
 					{
-						"id" "elementid" "bfc84336-c2d8-4dff-a784-c75275926d3b"
+						"id" "elementid" "388a833d-92b8-4df7-ba18-8bc636f98524"
 						"subdivisionLevels" "int_array" 
 						[
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
+							"0",
 							"0",
 							"0",
 							"0",
@@ -547,7 +643,7 @@
 			},
 			"CMapEntity"
 			{
-				"id" "elementid" "88be414c-8b0a-4271-ad93-e666487b36d1"
+				"id" "elementid" "5a067bad-0f84-424f-850d-463bfe49c000"
 				"nodeID" "int" "3"
 				"referenceID" "uint64" "0x0"
 				"children" "element_array" 
@@ -561,7 +657,7 @@
 				]
 				"relayPlugData" "DmePlugList"
 				{
-					"id" "elementid" "32b5aab3-e8f6-4f2e-9d56-5616e43d1095"
+					"id" "elementid" "97fb1777-bfc5-494d-a865-617916ee0567"
 					"names" "string_array" 
 					[
 					]
@@ -581,8 +677,10 @@
 				]
 				"entity_properties" "EditGameClassProps"
 				{
-					"id" "elementid" "7b42de93-2791-412a-9353-9e4755517942"
+					"id" "elementid" "59e1e862-ca7d-4de2-b078-0b36b6108234"
 					"classname" "string" "info_player_terrorist"
+					"targetname" "string" ""
+					"vscripts" "string" ""
 					"priority" "string" "0"
 					"enabled" "string" "1"
 				}
@@ -605,7 +703,7 @@
 		]
 		"relayPlugData" "DmePlugList"
 		{
-			"id" "elementid" "5a067bad-0f84-424f-850d-463bfe49c000"
+			"id" "elementid" "7dcd599f-1d95-4b0c-b29e-ee17b69c4d6b"
 			"names" "string_array" 
 			[
 			]
@@ -625,9 +723,10 @@
 		]
 		"entity_properties" "EditGameClassProps"
 		{
-			"id" "elementid" "97fb1777-bfc5-494d-a865-617916ee0567"
+			"id" "elementid" "a18afb86-1274-4900-bc52-7e4ea34710d0"
 			"classname" "string" "worldspawn"
 			"targetname" "string" ""
+			"vscripts" "string" ""
 			"skyname" "string" "sky_day01_01"
 			"pvstype" "string" "10"
 			"baked_light_index_min" "string" "0"
@@ -649,7 +748,7 @@
 
 	"visbility" "CVisibilityMgr"
 	{
-		"id" "elementid" "a18afb86-1274-4900-bc52-7e4ea34710d0"
+		"id" "elementid" "8c35c57c-a5f7-469f-b210-c8069d59b6c8"
 		"nodes" "element_array" 
 		[
 		]
@@ -660,7 +759,7 @@
 
 	"mapVariables" "CMapVariableSet"
 	{
-		"id" "elementid" "55e799f5-e7e9-4650-8083-7bfdace58734"
+		"id" "elementid" "bf659e3a-a23b-44a7-9212-d7442dcb5482"
 		"variableNames" "string_array" 
 		[
 		]
@@ -677,11 +776,11 @@
 
 	"rootSelectionSet" "CMapSelectionSet"
 	{
-		"id" "elementid" "c5a48b6c-6b51-4e3e-a01f-2a3822ff6f58"
+		"id" "elementid" "becc8b4f-c5a9-4e2d-8058-a1236d0a18dc"
 		"children" "element_array" 
 		[
 		]
-		"selectionSetName" "string" "root"
+		"selectionSetName" "string" ""
 		"selectionSetData" "element" ""
 	}
 

@@ -84,11 +84,15 @@ function meshDataElement(guid: () => string, m: PolygonMesh): DmxElement {
       stream(guid, 'flags:0', 3, ints(new Array(halfEdges / 2).fill(0))),
     ]))],
     ['faceData', elem(dataArray(guid, m.faceEdgeIndices.length, [
+      stream(guid, 'textureScale:0', 0, { kind: 'vector2_array', value: m.faceTextureScale }),
+      stream(guid, 'textureAxisU:0', 0, { kind: 'vector4_array', value: m.faceTextureAxisU }),
+      stream(guid, 'textureAxisV:0', 0, { kind: 'vector4_array', value: m.faceTextureAxisV }),
       stream(guid, 'materialindex:0', 8, ints(m.faceMaterialIndices)),
       stream(guid, 'flags:0', 3, ints(m.faceEdgeIndices.map(() => 0))),
+      stream(guid, 'lightmapScaleBias:0', 1, ints(m.faceLightmapScaleBias)),
     ]))],
     ['subdivisionData', elem(element('CDmePolygonMeshSubdivisionData', guid(), [
-      ['subdivisionLevels', ints(new Array(8).fill(0))],
+      ['subdivisionLevels', ints(new Array(halfEdges).fill(0))],
       ['streams', { kind: 'element_array', value: [] }],
     ]))],
   ])
@@ -152,9 +156,17 @@ function entityProperties(
   classname: string,
   properties: Record<string, string | number | boolean>,
 ): DmxElement {
+  // targetname/vscripts default to '' ahead of the caller's own properties,
+  // but a caller-supplied value of the same name wins in place rather than
+  // being duplicated (Map.set on an existing key keeps its original slot).
+  const merged = new Map<string, string | number | boolean>([
+    ['targetname', ''],
+    ['vscripts', ''],
+    ...Object.entries(properties),
+  ])
   const attrs: Array<[string, DmxValue]> = [['classname', str(classname)]]
   // Entity keyvalues are always strings in a vmap, whatever the FGD type says.
-  for (const [key, value] of Object.entries(properties)) {
+  for (const [key, value] of merged) {
     const text = typeof value === 'boolean' ? (value ? '1' : '0') : String(value)
     attrs.push([key, str(text)])
   }
@@ -165,12 +177,11 @@ function entityNode(
   guid: () => string,
   nodeId: number,
   entity: VmapEntity,
-  children: DmxElement[] = [],
 ): DmxElement {
   return element('CMapEntity', guid(), [
     ['nodeID', int(nodeId)],
     ['referenceID', { kind: 'uint64', value: '0x0' }],
-    ['children', { kind: 'element_array', value: children }],
+    ['children', { kind: 'element_array', value: [] }],
     ['variableTargetKeys', { kind: 'string_array', value: [] }],
     ['variableNames', { kind: 'string_array', value: [] }],
     ['relayPlugData', elem(emptyPlugList(guid))],
@@ -249,7 +260,7 @@ export function serializeVmap(input: VmapInput): string {
     ]))],
     ['rootSelectionSet', elem(element('CMapSelectionSet', guid(), [
       ['children', { kind: 'element_array', value: [] }],
-      ['selectionSetName', str('root')],
+      ['selectionSetName', str('')],
       ['selectionSetData', { kind: 'element', value: null }],
     ]))],
   ])

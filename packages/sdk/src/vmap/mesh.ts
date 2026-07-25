@@ -14,6 +14,10 @@ export interface PolygonMesh {
   faceDataIndices: number[]
   materials: string[]
   faceMaterialIndices: number[]
+  faceTextureScale: Vec2[]
+  faceTextureAxisU: Vec4[]
+  faceTextureAxisV: Vec4[]
+  faceLightmapScaleBias: number[]
   positions: Vec3[]
   texcoords: Vec2[]
   normals: Vec3[]
@@ -115,6 +119,10 @@ export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
   const texcoords = new Array<Vec2>(count)
   const normals = new Array<Vec3>(count)
   const tangents = new Array<Vec4>(count)
+  const faceTextureScale: Vec2[] = []
+  const faceTextureAxisU: Vec4[] = []
+  const faceTextureAxisV: Vec4[] = []
+  const faceLightmapScaleBias: number[] = []
 
   faces.forEach((loop, f) => {
     const normal = faceNormal(positions, loop)
@@ -124,6 +132,14 @@ export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
       tangents[h] = tangent
       texcoords[h] = faceUv(positions[destination[h]!]!, normal, tangent)
     }
+
+    const t: Vec3 = [tangent[0], tangent[1], tangent[2]]
+    const b = cross(normal, t)
+    faceTextureScale.push([0.25, 0.25])
+    faceTextureAxisU.push([t[0], t[1], t[2], 0])
+    // V runs opposite the bitangent: Source's V axis points down the surface.
+    faceTextureAxisV.push([-b[0], -b[1], -b[2], 0])
+    faceLightmapScaleBias.push(0)
   })
 
   return {
@@ -139,6 +155,10 @@ export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
     faceDataIndices: faces.map((_, i) => i),
     materials: [material],
     faceMaterialIndices: faces.map(() => 0),
+    faceTextureScale,
+    faceTextureAxisU,
+    faceTextureAxisV,
+    faceLightmapScaleBias,
     positions,
     texcoords,
     normals,

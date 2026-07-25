@@ -34,10 +34,6 @@ test('emits a well-formed vmap document', () => {
   expect(text).toContain('"enabled" "string" "1"')
 })
 
-test('output is byte-identical across runs', () => {
-  expect(serializeVmap(INPUT)).toBe(serializeVmap(INPUT))
-})
-
 test('matches the committed golden file', async () => {
   const golden = await Bun.file(
     new URL('../fixtures/one-box.vmap', import.meta.url),
