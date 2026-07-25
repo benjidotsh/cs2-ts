@@ -47,9 +47,17 @@ function faceNormal(positions: Vec3[], loop: number[]): Vec3 {
 
 /** Deterministic tangent basis: prefer world up, fall back to +X at the poles. */
 function faceTangent(normal: Vec3): Vec4 {
-  const t = Math.abs(normal[2]) > 0.999
+  const seed = Math.abs(normal[2]) > 0.999
     ? ([1, 0, 0] as Vec3)
     : normalize(cross([0, 0, 1], normal))
+  // Remove any component along the normal — the pole fallback is only
+  // approximately perpendicular for near-vertical normals.
+  const d = seed[0] * normal[0] + seed[1] * normal[1] + seed[2] * normal[2]
+  const t = normalize([
+    seed[0] - d * normal[0],
+    seed[1] - d * normal[1],
+    seed[2] - d * normal[2],
+  ])
   return [t[0], t[1], t[2], -1]
 }
 
