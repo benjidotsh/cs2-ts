@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { Direction, aabbsOverlap, directionYaw, isCardinal } from '../src/types'
+import { Direction, aabbsOverlap, directionYaw, isCardinal, type Aabb, type Vec3 } from '../src/types'
 import { SolverError } from '../src/errors'
 
 test('cardinals are recognised, diagonals are not', () => {
@@ -17,11 +17,13 @@ test('direction yaw follows Source conventions', () => {
 })
 
 test('touching boxes do not count as overlapping', () => {
-  const a = { min: [0, 0, 0] as const, max: [10, 10, 10] as const }
-  const b = { min: [10, 0, 0] as const, max: [20, 10, 10] as const }
-  const c = { min: [9, 0, 0] as const, max: [20, 10, 10] as const }
-  expect(aabbsOverlap({ ...a }, { ...b })).toBe(false)
-  expect(aabbsOverlap({ ...a }, { ...c })).toBe(true)
+  // Vec3 is a MUTABLE tuple on purpose — the solver and solids lowering both
+  // build vectors by index assignment. Do not use `as const` here.
+  const a: Aabb = { min: [0, 0, 0], max: [10, 10, 10] }
+  const b: Aabb = { min: [10, 0, 0], max: [20, 10, 10] }
+  const c: Aabb = { min: [9, 0, 0], max: [20, 10, 10] }
+  expect(aabbsOverlap(a, b)).toBe(false)
+  expect(aabbsOverlap(a, c)).toBe(true)
 })
 
 test('solver errors carry a machine-readable code', () => {
@@ -29,4 +31,10 @@ test('solver errors carry a machine-readable code', () => {
   expect(err.code).toBe('OVERLAP')
   expect(err.detail).toEqual({ rooms: ['a', 'b'] })
   expect(err).toBeInstanceOf(Error)
+})
+
+test('vectors are mutable by index, which the solver depends on', () => {
+  const v: Vec3 = [0, 0, 0]
+  v[1] = 42
+  expect(v).toEqual([0, 42, 0])
 })
