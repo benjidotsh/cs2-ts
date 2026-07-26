@@ -1,7 +1,7 @@
 #!/usr/bin/env bun
 import { Command } from 'commander'
 import { findCs2Install, preflight } from './install'
-import { emitMap, initAddon } from './commands'
+import { assertSafeName, emitMap, initAddon } from './commands'
 import { compileMap, launchMap } from './compile'
 import { toWindowsPath } from './paths'
 
@@ -30,6 +30,7 @@ program.command('emit')
   .action(async (file: string, opts: { out?: string; addon?: string; cs2Dir?: string }) => {
     let install
     if (opts.addon) {
+      assertSafeName('addon', opts.addon)
       install = await findCs2Install(opts.cs2Dir)
       await preflight(install, opts.addon)
     }
@@ -57,6 +58,7 @@ for (const [name, preset, description] of [
     addon: string; cs2Dir?: string
     lightmapResolution?: number; lightmapQuality?: number
   }) => {
+    assertSafeName('addon', opts.addon)
     const install = await findCs2Install(opts.cs2Dir)
     await preflight(install, opts.addon)
 

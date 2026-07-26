@@ -1,7 +1,11 @@
 import { expect, test } from 'bun:test'
 import { $ } from 'bun'
 import { join } from 'node:path'
-import { solve, toSolids } from '@cs2-ts/sdk'
+// Reaching into the SDK's internals on purpose: solve() and toSolids() are
+// not part of its public surface, but this test needs the solid count the
+// compiler is supposed to turn into meshes.
+import { solve } from '../../../sdk/src/solve'
+import { toSolids } from '../../../sdk/src/solids'
 import exampleMap from '../../../../examples/de_example'
 import { findCs2Install, preflight } from '../../src/install'
 import { initAddon, emitMap } from '../../src/commands'

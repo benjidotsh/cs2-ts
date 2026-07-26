@@ -33,9 +33,9 @@ export async function loadMap(file: string): Promise<CS2Map> {
     throw new Error(
       map === undefined
         ? `${file} has no default export. Add: export default map`
-        : `${file}'s default export is a ${
+        : `${file}'s default export has type ${
             (map as object)?.constructor?.name ?? typeof map
-          }, not a CS2Map. Export the value returned by new CS2Map(...).`,
+          }, not CS2Map. Export the value returned by new CS2Map(...).`,
     )
   }
   return map

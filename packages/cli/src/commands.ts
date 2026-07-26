@@ -6,10 +6,28 @@ import { loadMap } from './load'
 
 const ADDONINFO = '"AddonInfo"\n{\n\t"IsPlayable"\t"1"\n}\n'
 
+const SAFE_NAME = /^[A-Za-z0-9_-]+$/
+
+/**
+ * Map and addon names become path segments inside the CS2 install, and
+ * `join()` quietly resolves any `..` in them away — `new CS2Map('../../evil')`
+ * would have written outside the addon directory entirely. Both are names,
+ * not paths, so anything that isn't one is rejected outright.
+ */
+export function assertSafeName(kind: 'map' | 'addon', name: string): void {
+  if (SAFE_NAME.test(name)) return
+  throw new Error(
+    `"${name}" is not a usable ${kind} name. Use only letters, digits, underscores ` +
+    `and hyphens — a ${kind} name is a single path segment inside the CS2 install, ` +
+    'not a path.',
+  )
+}
+
 export async function initAddon(
   install: Pick<Cs2Install, 'root'>,
   addon: string,
 ): Promise<string> {
+  assertSafeName('addon', addon)
   const contentMaps = join(install.root, 'content', 'csgo_addons', addon, 'maps')
   const gameDir = join(install.root, 'game', 'csgo_addons', addon)
 
@@ -33,6 +51,8 @@ export interface EmitOptions {
 
 export async function emitMap(opts: EmitOptions): Promise<string> {
   const map = await loadMap(opts.file)
+  assertSafeName('map', map.graph.name)
+  if (opts.addon !== undefined) assertSafeName('addon', opts.addon)
   const text = buildVmap(map)
 
   const target = opts.out ?? (opts.install && opts.addon

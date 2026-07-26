@@ -67,7 +67,7 @@ test('rejects a module whose default export is some other object', async () => {
   const file = join(dir, 'wrong.ts')
   await Bun.write(file, 'export default { hello: "world" }')
   await expect(loadMap(file)).rejects.toThrow(
-    `${file}'s default export is a Object, not a CS2Map. Export the value returned by new CS2Map(...).`,
+    `${file}'s default export has type Object, not CS2Map. Export the value returned by new CS2Map(...).`,
   )
 })
 
@@ -82,6 +82,37 @@ test('init creates both addon directories and addoninfo.txt', async () => {
     .toBe(true)
   expect(await Bun.file(join(root, 'content', 'csgo_addons', 'my_addon', 'maps', '.keep')).exists())
     .toBe(true)
+})
+
+test('a map name that is really a path is rejected before anything is written', async () => {
+  // join() resolves the `..` away, so without a guard this writes the .vmap
+  // clean outside the addon directory it was aimed at.
+  const dir = await mkdtemp(join(tmpdir(), 'cs2ts-escape-'))
+  await withSdkResolvable(dir)
+  const file = join(dir, 'map.ts')
+  await Bun.write(file, MAP_SOURCE.replace('de_fixture', '../../../evil'))
+
+  const root = await mkdtemp(join(tmpdir(), 'cs2ts-install-'))
+  const install = {
+    root, rootWin: 'C:\\x', gameCsgo: '', gameCsgoWin: '',
+    binDir: '', resourceCompiler: '', cs2Exe: '',
+  }
+  await expect(emitMap({ file, install, addon: 'my_addon' }))
+    .rejects.toThrow('is not a usable map name')
+
+  const escaped = join(root, 'content', 'evil.vmap')
+  expect(await Bun.file(escaped).exists()).toBe(false)
+})
+
+test('an addon name that is really a path is rejected before anything is created', async () => {
+  const root = await mkdtemp(join(tmpdir(), 'cs2ts-install-'))
+  const install = {
+    root, rootWin: 'C:\\x', gameCsgo: '', gameCsgoWin: '',
+    binDir: '', resourceCompiler: '', cs2Exe: '',
+  }
+  await expect(initAddon(install, '../../../evil'))
+    .rejects.toThrow('is not a usable addon name')
+  expect(await Bun.file(join(root, 'evil', 'addoninfo.txt')).exists()).toBe(false)
 })
 
 test('emit writes a vmap to an explicit --out path', async () => {

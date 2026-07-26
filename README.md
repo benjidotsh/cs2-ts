@@ -213,10 +213,18 @@ A few narrower constraints are worth knowing before you hit them:
 - As noted under the example above, `Placement.facing` can't express every yaw
   literally: values 0–7 are `Direction` enum members, so an angle like 5° has no
   literal representation.
-- Where two connected rooms have different footprint widths and meet flush (`length:
-  0`), the wider room's wall isn't trimmed back to the narrower one — you get some
-  overlapping brush at the T-junction. That's duplicate surface, not a gap: the map is
-  still sealed and playable, just not perfectly tidy geometry at that joint.
+- Geometry is emitted per room and per corridor with no global merge step, so junctions
+  can carry duplicated, coplanar brush — where rooms of different sizes meet, where a
+  corridor's side walls run past the walls of the rooms they join, and around openings
+  in rooms whose floors sit at different heights. It is duplicate surface, not a gap:
+  the map stays sealed and playable, and what you may see is z-fighting on a shared
+  face rather than a hole. Some of it is deliberate — closing those seams by trimming
+  brushes back to their neighbours is exactly what left holes in the first place.
+- Room names, addon names and connection dimensions are validated, and a layout that
+  runs past Source's ±16384-unit world is rejected with the offending room named. A
+  `Transition.Step` may not rise more than 64 units, on either kind of connection:
+  beyond that it is a wall, not a route, and you want `Transition.Ramp` or
+  `Transition.Stairs` with enough `length` to climb it.
 
 ## Credit
 
