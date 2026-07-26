@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import exampleMap from '../../../examples/de_example'
 import { roomEntities } from '../src/entities'
+import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import type { Passage, PlacedRoom } from '../src/solve'
 import { toSolids } from '../src/solids'
@@ -99,6 +100,13 @@ test('every spawn point lies inside its room and is not inside any solid', () =>
       expect(x).toBeLessThanOrEqual(room.bounds.max[0]!)
       expect(y).toBeGreaterThanOrEqual(room.bounds.min[1]!)
       expect(y).toBeLessThanOrEqual(room.bounds.max[1]!)
+      // The x/y and not-inside-a-solid checks below can't see a spawn placed
+      // below the floor slab: dropping straight down from z=0 to some large
+      // negative offset lands in open air under the map (not inside any
+      // solid), and clears the floor bounds check entirely since that only
+      // looks at x/y. A spawn has to sit exactly on the floor it's placed
+      // in, not merely outside of solids.
+      expect(z).toBeCloseTo(room.floorZ, 6)
 
       // Sample through a player's standing height (feet to head), not just
       // the entity's origin, which sits exactly on the floor plane.
@@ -159,33 +167,76 @@ test('every ramp or stair climbs monotonically from one floor to the other with 
   expect(rising.length).toBeGreaterThan(0)
 
   for (const passage of rising) {
-    const heights = sampleWalkingSurface(passage)
-
-    const lo = Math.min(passage.fromZ, passage.toZ)
-    const hi = Math.max(passage.fromZ, passage.toZ)
-    const EPS = 0.5
-
-    // Continuous at both ends: the corridor's floor at its very first and
-    // very last sample must match the room floor it meets, not float above
-    // or drop below it.
-    expect(heights[0]!).toBeGreaterThanOrEqual(lo - EPS)
-    expect(heights[0]!).toBeLessThanOrEqual(lo + EPS)
-    expect(heights.at(-1)!).toBeGreaterThanOrEqual(hi - EPS)
-    expect(heights.at(-1)!).toBeLessThanOrEqual(hi + EPS)
-
-    // Monotonic and free of discontinuities: the total absolute movement in
-    // z along the sampled surface should equal the net rise. If the surface
-    // ever dipped, jumped past the target and came back, or had a step the
-    // sampling resolution could see, the accumulated absolute delta would
-    // exceed the net delta.
-    let totalAbsDelta = 0
-    for (let i = 1; i < heights.length; i++) totalAbsDelta += Math.abs(heights[i]! - heights[i - 1]!)
-    expect(totalAbsDelta).toBeLessThanOrEqual(hi - lo + EPS)
+    const from = roomsById.get(passage.from)!
+    const to = roomsById.get(passage.to)!
+    assertMonotonicClimb(from, to, passage, sampleWalkingSurface(solids, passage))
   }
 })
 
+// Both of de_example's rises happen to place the "from" room at the passage's
+// axis-min end, which makes corridorSolids()'s `fromAtMinEnd ===
+// (toZ > fromZ)` term a no-op for North/East connections — the exact
+// regression Task 10 fixed (a South/West rise climbing the wrong way) is
+// invisible to the test above no matter how it samples, because the fixture
+// never places a room at the axis-max end. Covering all four cardinals here,
+// on a small synthetic map, is what actually exercises the failing quadrant.
+test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+  'a ramp climbs monotonically to the upper floor, facing %i',
+  (direction) => {
+    const map = new CS2Map('t')
+    const a = map.room({ name: 'a', size: [512, 512, 192] })
+    a.room({ name: 'b', size: [512, 512, 192] },
+      { direction, width: 192, length: 384, rise: 128 })
+    const localLayout = solve(map.graph)
+    const localSolids = toSolids(localLayout)
+    const passage = localLayout.passages.find((p) => p.toZ !== p.fromZ)!
+    const from = localLayout.rooms.find((r) => r.id === passage.from)!
+    const to = localLayout.rooms.find((r) => r.id === passage.to)!
+
+    assertMonotonicClimb(from, to, passage, sampleWalkingSurface(localSolids, passage))
+  },
+)
+
+/**
+ * `heights[0]` is sampled at the passage's axis-min end and `heights.at(-1)`
+ * at its axis-max end — but which room (`from` or `to`) physically sits at
+ * which end depends on the connection's direction/sign (North/East place the
+ * child at axis-max; South/West place it at axis-min), not on axis order.
+ * Deriving that mapping here from the rooms' own placed bounds (solve()'s
+ * output) — rather than trusting corridorSolids()'s internal `fromAtMinEnd`
+ * — is what keeps this oracle independent of the exact code path a
+ * direction-sign regression would corrupt: if solids.ts's wedge-orientation
+ * logic breaks, this check must still know which end is meant to be lo and
+ * which is meant to be hi.
+ */
+function assertMonotonicClimb(from: PlacedRoom, to: PlacedRoom, passage: Passage, heights: number[]): void {
+  const axis = passage.axis
+  const fromAtAxisMin = from.bounds.max[axis]! <= passage.bounds.min[axis]! + 1e-6
+  const axisMinZ = fromAtAxisMin ? from.floorZ : to.floorZ
+  const axisMaxZ = fromAtAxisMin ? to.floorZ : from.floorZ
+  const EPS = 0.5
+
+  // Continuous at both ends: the corridor's floor at its very first and
+  // very last sample must match the room floor it meets there, not float
+  // above or drop below it — and not just "match one of the two floors",
+  // which end matches which specifically.
+  expect(heights[0]!).toBeGreaterThanOrEqual(axisMinZ - EPS)
+  expect(heights[0]!).toBeLessThanOrEqual(axisMinZ + EPS)
+  expect(heights.at(-1)!).toBeGreaterThanOrEqual(axisMaxZ - EPS)
+  expect(heights.at(-1)!).toBeLessThanOrEqual(axisMaxZ + EPS)
+
+  // Monotonic and free of discontinuities: the total absolute movement in
+  // z along the sampled surface should equal the net rise. If the surface
+  // ever dipped, jumped past the target and came back, or had a step the
+  // sampling resolution could see, the accumulated absolute delta would
+  // exceed the net delta.
+  let totalAbsDelta = 0
+  for (let i = 1; i < heights.length; i++) totalAbsDelta += Math.abs(heights[i]! - heights[i - 1]!)
+  expect(totalAbsDelta).toBeLessThanOrEqual(Math.abs(axisMaxZ - axisMinZ) + EPS)
+}
+
 /** Walking-surface height sampled along a passage's own travel axis, corridor-width centred. */
-function sampleWalkingSurface(passage: Passage): number[] {
+function sampleWalkingSurface(all: Solid[], passage: Passage): number[] {
   const axis = passage.axis
   const other: 0 | 1 = axis === 0 ? 1 : 0
   const axisMin = passage.bounds.min[axis]!
@@ -202,7 +253,7 @@ function sampleWalkingSurface(passage: Passage): number[] {
     const t = i / STEPS
     const pos = axisMin + inset + (axisMax - axisMin - 2 * inset) * t
     const point: [number, number] = axis === 0 ? [pos, centreOther] : [centreOther, pos]
-    const h = surfaceHeightAt(solids, point[0], point[1], passage.bounds.max[2]!)
+    const h = surfaceHeightAt(all, point[0], point[1], passage.bounds.max[2]!)
     if (h === null) {
       throw new Error(`no walking surface found along ramp at t=${t} (${point[0]}, ${point[1]})`)
     }
