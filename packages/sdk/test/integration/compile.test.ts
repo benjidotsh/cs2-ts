@@ -22,21 +22,25 @@ test.if(enabled)('a generated vmap compiles to a vpk', async () => {
     '"AddonInfo"\n{\n\t"IsPlayable"\t"1"\n}\n')
   await Bun.write(`${CS2}/content/csgo_addons/${ADDON}/maps/it.vmap`, text)
 
-  const result = await $`${`${CS2}/game/bin/win64/resourcecompiler.exe`} -nop4 \
-    -game ${`${CS2_WIN}\\game\\csgo`} -world -phys \
-    -i ${`${CS2_WIN}\\content\\csgo_addons\\${ADDON}\\maps\\it.vmap`}`
-    .cwd(`${CS2}/game/bin/win64`).nothrow().quiet()
+  try {
+    const result = await $`${`${CS2}/game/bin/win64/resourcecompiler.exe`} -nop4 \
+      -game ${`${CS2_WIN}\\game\\csgo`} -world -phys \
+      -i ${`${CS2_WIN}\\content\\csgo_addons\\${ADDON}\\maps\\it.vmap`}`
+      .cwd(`${CS2}/game/bin/win64`).nothrow().quiet()
 
-  expect(result.exitCode).toBe(0)
-  expect(await Bun.file(`${CS2}/game/csgo_addons/${ADDON}/maps/it.vpk`).exists()).toBe(true)
+    expect(result.exitCode).toBe(0)
+    expect(await Bun.file(`${CS2}/game/csgo_addons/${ADDON}/maps/it.vpk`).exists()).toBe(true)
 
-  // Exit 0 and a written vpk are NOT proof of success: a mesh with broken
-  // topology compiles cleanly to an empty world. Assert real geometry.
-  const clusters = result.stdout.toString()
-    .match(/Building render clusters\.\.\. (\d+) meshes, (\d+) triangles/)
-  expect(clusters).not.toBeNull()
-  expect(Number(clusters![1])).toBeGreaterThan(0)
-  expect(Number(clusters![2])).toBeGreaterThan(0)
-
-  await $`rm -rf ${`${CS2}/content/csgo_addons/${ADDON}`} ${`${CS2}/game/csgo_addons/${ADDON}`}`
+    // Exit 0 and a written vpk are NOT proof of success: a mesh with broken
+    // topology compiles cleanly to an empty world. Assert real geometry.
+    const clusters = result.stdout.toString()
+      .match(/Building render clusters\.\.\. (\d+) meshes, (\d+) triangles/)
+    expect(clusters).not.toBeNull()
+    expect(Number(clusters![1])).toBeGreaterThan(0)
+    expect(Number(clusters![2])).toBeGreaterThan(0)
+  } finally {
+    // Runs even when an assertion throws — this test is meant to be run when
+    // something is broken, so the failure path must not litter the CS2 install.
+    await $`rm -rf ${`${CS2}/content/csgo_addons/${ADDON}`} ${`${CS2}/game/csgo_addons/${ADDON}`}`
+  }
 }, 300_000)
