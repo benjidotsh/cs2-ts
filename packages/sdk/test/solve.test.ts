@@ -142,37 +142,46 @@ test('a placement rise exactly equal to its run (1:1) is accepted', () => {
 })
 
 // Found by the seal sweep, which flagged these layouts as sealed but with the
-// second room unreachable: a corridor is capped at the lower of the two
-// rooms' ceilings, so a rise that lifts one floor to the other room's ceiling
-// leaves a doorway with no opening in it. It compiled, and you could not get
-// through it.
-test('a rise that reaches the other room\'s ceiling leaves no clearance', () => {
+// second room unreachable: a doorway in a shared wall is capped at the lower
+// of the two rooms' ceilings, so a step that lifts one floor to the other
+// room's ceiling leaves a doorway with no opening in it. It compiled, and you
+// could not get through it.
+//
+// A *corridor* is a different matter: it carries its own roof, which climbs
+// with its floor, so it can join two rooms whose floors and ceilings do not
+// overlap at all (see "a corridor may climb past the lower room's ceiling"
+// below). Only a flush doorway, which has no roof of its own, can still run
+// out of clear height.
+test('a step that reaches the other room\'s ceiling leaves no clearance', () => {
   const map = new CS2Map('t')
-  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  // "a" is only 64 tall, and "b" starts a whole 64 above it: the shared wall
+  // has nothing left to cut a doorway out of.
+  const a = map.room({ name: 'a', size: [512, 512, 64] })
   a.room({ name: 'b', size: [512, 512, 192] },
-    { direction: Direction.North, width: 128, length: 256, rise: 192 })
+    { direction: Direction.North, width: 128, length: 0, rise: 64, via: Transition.Step })
   try {
     solve(map.graph)
     throw new Error('expected solve to throw')
   } catch (e) {
     expect(e).toBeInstanceOf(SolverError)
     expect((e as SolverError).code).toBe('INSUFFICIENT_CLEARANCE')
-    expect((e as SolverError).detail).toMatchObject({ ceiling: 192, floor: 192 })
+    expect((e as SolverError).detail).toMatchObject({ ceiling: 64, floor: 64 })
   }
 })
 
-test('a cross connection with no clear height above the higher floor is rejected', () => {
-  // Both placement edges are fine on their own: "ground" is short but level
-  // with "north", and "east" rises only 128 inside a room tall enough to take
-  // it. The cross edge is the one that pairs a floor at 128 with a ceiling at
-  // 128 — and its run is long enough that traversability is not the problem.
+test('a flush cross connection with no clear height above the higher floor is rejected', () => {
+  // Every placement edge here is fine on its own: "ground" is short but level
+  // with "north", and "east" steps up only 64 inside a room tall enough to
+  // take it. The cross edge is the one that pairs a floor at 64 with a
+  // ceiling at 64 — and the two rooms are flush, so there is no corridor to
+  // carry a roof over the difference.
   const map = new CS2Map('t')
-  const ground = map.room({ name: 'ground', size: [2048, 512, 128] })
+  const ground = map.room({ name: 'ground', size: [1024, 512, 64] })
   const north = ground.room({ name: 'north', size: [512, 512, 1024] },
-    { direction: Direction.North, width: 128, length: 256 })
-  const east = north.room({ name: 'east', size: [512, 512, 512] },
-    { direction: Direction.East, width: 128, length: 256, rise: 128 })
-  map.connect(ground, east, { width: 128 })
+    { direction: Direction.North, width: 128, length: 0 })
+  const east = north.room({ name: 'east', size: [512, 512, 192] },
+    { direction: Direction.East, width: 128, length: 0, rise: 64, via: Transition.Step })
+  map.connect(ground, east, { width: 128, via: Transition.Step })
   try {
     solve(map.graph)
     throw new Error('expected solve to throw')
@@ -182,6 +191,26 @@ test('a cross connection with no clear height above the higher floor is rejected
     expect((e as SolverError).detail).toMatchObject({ a: 'ground', b: 'east' })
   }
 })
+
+test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+  'a corridor may climb past the lower room\'s ceiling, facing %s',
+  (direction) => {
+    // 192 of rise between two 192-tall rooms: "b"'s floor sits exactly at
+    // "a"'s ceiling, so the two rooms' interiors do not overlap in z at all.
+    // A corridor's roof climbs with its floor, so this is an ordinary sloping
+    // tube — it was rejected only while the roof stayed flat and the way
+    // through was capped at "a"'s ceiling. seal.test.ts proves it is sealed
+    // and that "b" is reachable; headroom.test.ts proves it stays 192 tall.
+    const map = new CS2Map('t')
+    const a = map.room({ name: 'a', size: [512, 512, 192] })
+    a.room({ name: 'b', size: [512, 512, 192] },
+      { direction, width: 128, length: 256, rise: 192 })
+    const layout = solve(map.graph)
+    const passage = layout.passages[0]!
+    expect([passage.fromZ, passage.toZ]).toEqual([0, 192])
+    expect([passage.fromCeilingZ, passage.toCeilingZ]).toEqual([192, 384])
+  },
+)
 
 test('a corridor driving through a third room is an overlap', () => {
   // aSite east of mid, bSite west of mid: the only straight corridor between

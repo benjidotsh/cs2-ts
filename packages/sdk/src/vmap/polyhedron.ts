@@ -25,6 +25,39 @@ export function boxPolyhedron(min: Vec3, max: Vec3): Polyhedron {
   }
 }
 
+const OPPOSITE: Record<Cardinal, Cardinal> = {
+  [Direction.East]: Direction.West,
+  [Direction.West]: Direction.East,
+  [Direction.North]: Direction.South,
+  [Direction.South]: Direction.North,
+}
+
+/**
+ * The vertical mirror of `wedgePolyhedron`: a flat top spanning the full
+ * footprint, with the underside sloping down away from the `rise` side — the
+ * shape a corridor ceiling needs when the floor below it ramps.
+ *
+ * Both halves of the construction are needed for the result to be a valid
+ * solid. Reflecting z about the box's mid-height puts the sloped face on the
+ * same plane as the upright wedge's (so a ramp and the ceiling over it climb
+ * in step), and a reflection reverses orientation — so every face loop is
+ * reversed too, which is what keeps the winding outward.
+ *
+ * Mirroring the *opposite* rise, rather than the same one, is what makes the
+ * sloped face climb toward `rise` in both senses: the upright wedge's slope
+ * descends away from its own high edge, and the reflection flips that.
+ */
+export function invertedWedgePolyhedron(
+  min: Vec3, max: Vec3, rise: Cardinal,
+): Polyhedron {
+  const upright = wedgePolyhedron(min, max, OPPOSITE[rise])
+  const flip = min[2] + max[2]
+  return {
+    positions: upright.positions.map(([x, y, z]): Vec3 => [x, y, flip - z]),
+    faces: upright.faces.map((loop) => [...loop].reverse()),
+  }
+}
+
 /**
  * Triangular prism whose floor spans the full footprint and whose top edge sits
  * on the `rise` side. Built by collapsing a box's two far-side top corners onto
@@ -65,7 +98,8 @@ export function wedgePolyhedron(min: Vec3, max: Vec3, rise: Cardinal): Polyhedro
 }
 
 export function solidPolyhedron(solid: Solid): Polyhedron {
-  return solid.kind === 'box'
-    ? boxPolyhedron(solid.min, solid.max)
+  if (solid.kind === 'box') return boxPolyhedron(solid.min, solid.max)
+  return solid.inverted
+    ? invertedWedgePolyhedron(solid.min, solid.max, solid.rise)
     : wedgePolyhedron(solid.min, solid.max, solid.rise)
 }

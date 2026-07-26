@@ -1,6 +1,8 @@
 import { expect, test } from 'bun:test'
 import { Direction, type Cardinal, type Vec3 } from '../../src/types'
-import { boxPolyhedron, wedgePolyhedron } from '../../src/vmap/polyhedron'
+import {
+  boxPolyhedron, invertedWedgePolyhedron, wedgePolyhedron,
+} from '../../src/vmap/polyhedron'
 import { buildMesh } from '../../src/vmap/mesh'
 
 const BOX = boxPolyhedron([0, 0, 0], [64, 128, 32])
@@ -138,6 +140,100 @@ test.each(CARDINALS)('wedge rising toward %s is closed and wound outward', (rise
   for (const p of top) expect(p[axis]).toBe(wantMax ? (axis === 0 ? 64 : 96) : 0)
 })
 
+/** Every corner of every face must sit on the outward side of that face. */
+function assertWoundOutward(poly: { positions: Vec3[]; faces: number[][] }): void {
+  const centroid: Vec3 = [0, 0, 0]
+  for (const p of poly.positions) {
+    centroid[0] += p[0] / poly.positions.length
+    centroid[1] += p[1] / poly.positions.length
+    centroid[2] += p[2] / poly.positions.length
+  }
+  for (const loop of poly.faces) {
+    const n = newellNormal(poly.positions, loop)
+    for (const idx of loop) {
+      const p = poly.positions[idx]!
+      const dot = (p[0] - centroid[0]) * n[0]
+        + (p[1] - centroid[1]) * n[1]
+        + (p[2] - centroid[2]) * n[2]
+      expect(dot).toBeGreaterThan(0)
+    }
+  }
+}
+
+// The ceiling over a ramp is the upright wedge mirrored in z, and a mirror
+// reverses orientation: get that half wrong and every face of the ceiling
+// points inward, which compiles and renders as a hole. Checked with the same
+// rigour as the upright wedge above, in all four rise directions, because a
+// single orientation cannot see an axis swap or a sign error.
+test.each(CARDINALS)('inverted wedge rising toward %s is closed and wound outward', (rise) => {
+  // Deliberately non-cubic, and off the origin so a mirror about the wrong
+  // plane shows up as displaced geometry rather than as an accidental match.
+  const min: Vec3 = [8, 16, 32]
+  const max: Vec3 = [72, 112, 96]
+  const poly = invertedWedgePolyhedron(min, max, rise)
+  const m = buildMesh(poly, 'm')
+
+  const v = m.vertexEdgeIndices.length
+  const e = m.edgeVertexIndices.length / 2
+  const f = m.faceEdgeIndices.length
+  expect([v, e, f]).toEqual([6, 9, 5])
+  expect(v - e + f).toBe(2)
+
+  assertWoundOutward(poly)
+
+  // Flat top: four vertices at max z, one over each corner of the footprint.
+  const top = poly.positions.filter((p) => p[2] === max[2])
+  expect(top).toHaveLength(4)
+  expect(new Set(top.map((p) => `${p[0]},${p[1]}`))).toEqual(new Set([
+    `${min[0]},${min[1]}`, `${max[0]},${min[1]}`,
+    `${max[0]},${max[1]}`, `${min[0]},${max[1]}`,
+  ]))
+
+  // The underside's low edge sits on the side *away* from the rise: the
+  // sloped face climbs toward `rise`, exactly as the upright wedge's does.
+  const low = poly.positions.filter((p) => p[2] === min[2])
+  expect(low).toHaveLength(2)
+  const axis = rise === Direction.East || rise === Direction.West ? 0 : 1
+  const towardMax = rise === Direction.East || rise === Direction.North
+  for (const p of low) expect(p[axis]).toBe(towardMax ? min[axis]! : max[axis]!)
+})
+
+test.each(CARDINALS)(
+  'an inverted wedge slopes on the same plane as the upright one, facing %s',
+  (rise) => {
+    // A ramp and the ceiling over it must climb in step, or the clearance
+    // between them is not constant. Same box, same rise: the sloped faces
+    // have to agree at every point of the footprint.
+    const min: Vec3 = [0, 0, 0]
+    const max: Vec3 = [64, 96, 32]
+    const upright = wedgePolyhedron(min, max, rise)
+    const inverted = invertedWedgePolyhedron(min, max, rise)
+
+    // The upright wedge's high edge and the inverted one's high edge are the
+    // same two points: both slopes reach max z on the rise side.
+    const highOf = (poly: { positions: Vec3[] }) =>
+      new Set(poly.positions.filter((p) => p[2] === max[2])
+        .map((p) => `${p[0]},${p[1]}`))
+    const lowOf = (poly: { positions: Vec3[] }) =>
+      new Set(poly.positions.filter((p) => p[2] === min[2])
+        .map((p) => `${p[0]},${p[1]}`))
+
+    // Upright: two vertices up top (the slope's high edge), four on the floor.
+    // Inverted: four up top (the flat ceiling), two down low (the slope's low
+    // edge). The slope runs between the upright's high edge and the
+    // inverted's low edge, so those two must be on opposite sides.
+    expect([...highOf(upright)].every((p) => !lowOf(inverted).has(p))).toBe(true)
+    expect(highOf(upright).size).toBe(2)
+    expect(lowOf(inverted).size).toBe(2)
+    // The inverted wedge's low edge is where the upright wedge's floor meets
+    // its own low side, i.e. the corners the upright slope starts from.
+    const uprightLowSide = new Set(
+      upright.positions.filter((p) => p[2] === min[2] &&
+        !highOf(upright).has(`${p[0]},${p[1]}`)).map((p) => `${p[0]},${p[1]}`))
+    expect(lowOf(inverted)).toEqual(uprightLowSide)
+  },
+)
+
 test('face normals point outward', () => {
   const m = buildMesh(BOX, 'm')
   // face 1 is the top; every corner normal on it is +Z
@@ -151,7 +247,8 @@ test('face normals point outward', () => {
 
 test('tangent frames stay orthogonal, including on shallow slopes', () => {
   const shallow = wedgePolyhedron([0, 0, 0], [512, 64, 16], Direction.East)
-  for (const poly of [BOX, shallow]) {
+  const shallowCeiling = invertedWedgePolyhedron([0, 0, 0], [512, 64, 16], Direction.East)
+  for (const poly of [BOX, shallow, shallowCeiling]) {
     const m = buildMesh(poly, 'm')
     for (let h = 0; h < m.normals.length; h++) {
       const n = m.normals[h]!

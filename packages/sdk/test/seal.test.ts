@@ -172,6 +172,22 @@ test('stairs whose last tread is shallower than a wall stay sealed', () => {
   expect(checkSealed(map)).toBeNull()
 })
 
+test.each(DIRECTIONS)(
+  'a corridor climbing past the lower room\'s ceiling is sealed and reachable, facing %s',
+  (direction) => {
+    // The solver used to refuse this outright (INSUFFICIENT_CLEARANCE) because
+    // a flat roof capped at "a"'s ceiling left the doorway into "b" with no
+    // opening in it. Now that the roof climbs with the floor the layout is
+    // buildable — which is only an improvement if it is also sealed and "b"
+    // is actually reachable, which is what this asserts.
+    const map = new CS2Map('t')
+    const a = map.room({ name: 'a', size: [...ROOM] })
+    a.room({ name: 'b', size: [...ROOM] },
+      { direction, width: 192, length: 256, rise: 192 })
+    expect(checkSealed(map)).toBeNull()
+  },
+)
+
 test('a cross-edge corridor closing a loop is sealed', () => {
   // map.connect() derives its rise from the two rooms' placed floor heights
   // rather than being told one, so the only way to exercise a cross-edge

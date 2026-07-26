@@ -23,6 +23,15 @@ export interface Passage {
   height: number | null
   fromZ: number
   toZ: number
+  /**
+   * Ceiling height at each end's own face. A corridor's roof follows its
+   * floor, so that a rise does not eat the headroom: the two are equal on
+   * anything level, and differ by the rise on anything that climbs. Each is
+   * clamped to the ceiling of the room it meets, so neither end pokes out of
+   * the room it opens into.
+   */
+  fromCeilingZ: number
+  toCeilingZ: number
   via: Transition
 }
 
@@ -38,6 +47,34 @@ const AXIS: Record<Cardinal, { axis: 0 | 1; sign: 1 | -1 }> = {
   [Direction.West]: { axis: 0, sign: -1 },
   [Direction.North]: { axis: 1, sign: 1 },
   [Direction.South]: { axis: 1, sign: -1 },
+}
+
+/**
+ * Ceiling height at each end of a corridor, given each end's floor and the
+ * ceiling of the room it opens into.
+ *
+ * The clear height is the same at both ends, so a corridor that climbs takes
+ * its roof up with it and a rise costs no headroom. Left flat over a ramp,
+ * the far end of `connector -> aSite` in the shipped example came out 64
+ * units tall — a standing player is 72 — and the corridor pinched shut.
+ *
+ * Unless the author asked for a specific height, the clear height is the
+ * smaller of the two rooms' own interior heights: the most a corridor can
+ * offer while still fitting through the shorter of the rooms it joins. Each
+ * end is then clamped to that end's own room ceiling, so neither end opens
+ * above the room it meets.
+ */
+function corridorCeilings(
+  fromFloorZ: number, fromRoomCeilingZ: number,
+  toFloorZ: number, toRoomCeilingZ: number,
+  height: number | null,
+): [number, number] {
+  const clear = height ?? Math.min(
+    fromRoomCeilingZ - fromFloorZ, toRoomCeilingZ - toFloorZ)
+  return [
+    Math.min(fromRoomCeilingZ, fromFloorZ + clear),
+    Math.min(toRoomCeilingZ, toFloorZ + clear),
+  ]
 }
 
 const overlap1d = (aMin: number, aMax: number, bMin: number, bMax: number) => {
@@ -183,38 +220,44 @@ export function solve(graph: MapGraph): Layout {
       )
     }
 
-    // A corridor never rises above the lower of the two rooms' own ceilings,
-    // even when an explicit height would otherwise push it higher.
-    const roomsCeiling = Math.min(parent.bounds.max[2]!, floorZ + child.size[2]!)
-    const passageCeiling = c.height != null
-      ? Math.min(Math.max(parent.floorZ, floorZ) + c.height, roomsCeiling)
-      : roomsCeiling
-
-    assertClearance(passageCeiling, Math.max(parent.floorZ, floorZ),
-      `connection from "${parent.name}" to "${child.name}"`,
-      { parent: parent.name, child: child.name })
+    const childCeilingZ = floorZ + child.size[2]!
+    const centre = (span.lo + span.hi) / 2
 
     if (c.length > 0) {
-      const centre = (span.lo + span.hi) / 2
-      const pMin: Vec3 = [0, 0, floorZ]
-      const pMax: Vec3 = [0, 0, passageCeiling]
+      const [fromCeilingZ, toCeilingZ] = corridorCeilings(
+        parent.floorZ, parent.bounds.max[2]!, floorZ, childCeilingZ, c.height)
+
+      const pMin: Vec3 = [0, 0, Math.min(parent.floorZ, floorZ)]
+      const pMax: Vec3 = [0, 0, Math.max(fromCeilingZ, toCeilingZ)]
       pMin[axis] = Math.min(parentFace, nearFace)
       pMax[axis] = Math.max(parentFace, nearFace)
       pMin[other] = centre - c.width / 2
       pMax[other] = centre + c.width / 2
-      pMin[2] = Math.min(parent.floorZ, floorZ)
 
       passages.push({
         from: parent.id, to: child.id,
         bounds: { min: pMin, max: pMax },
         axis, width: c.width, height: c.height,
-        fromZ: parent.floorZ, toZ: floorZ, via: c.via,
+        fromZ: parent.floorZ, toZ: floorZ,
+        fromCeilingZ, toCeilingZ, via: c.via,
       })
     } else {
       // Flush rooms: a zero-thickness passage marks where to cut the openings.
-      const centre = (span.lo + span.hi) / 2
+      // A doorway in a shared wall has no roof of its own to bridge two
+      // heights with, so both sides get the same top — the lower of the two
+      // ceilings. Cut the taller room's side any higher and it looks out over
+      // the shorter room's ceiling slab into the void.
+      const roomsCeiling = Math.min(parent.bounds.max[2]!, childCeilingZ)
+      const doorwayCeiling = c.height != null
+        ? Math.min(Math.max(parent.floorZ, floorZ) + c.height, roomsCeiling)
+        : roomsCeiling
+
+      assertClearance(doorwayCeiling, Math.max(parent.floorZ, floorZ),
+        `connection from "${parent.name}" to "${child.name}"`,
+        { parent: parent.name, child: child.name })
+
       const pMin: Vec3 = [0, 0, Math.min(parent.floorZ, floorZ)]
-      const pMax: Vec3 = [0, 0, passageCeiling]
+      const pMax: Vec3 = [0, 0, doorwayCeiling]
       pMin[axis] = parentFace; pMax[axis] = parentFace
       pMin[other] = centre - c.width / 2
       pMax[other] = centre + c.width / 2
@@ -223,7 +266,8 @@ export function solve(graph: MapGraph): Layout {
         from: parent.id, to: child.id,
         bounds: { min: pMin, max: pMax },
         axis, width: c.width, height: c.height,
-        fromZ: parent.floorZ, toZ: floorZ, via: c.via,
+        fromZ: parent.floorZ, toZ: floorZ,
+        fromCeilingZ: doorwayCeiling, toCeilingZ: doorwayCeiling, via: c.via,
       })
     }
   }
@@ -288,18 +332,27 @@ export function solve(graph: MapGraph): Layout {
       const centre = (span.lo + span.hi) / 2
       const loZ = Math.min(a.floorZ, b.floorZ)
       const hiZ = Math.max(a.floorZ, b.floorZ)
-      // A corridor never rises above the lower of the two rooms' own ceilings,
-      // even when an explicit height would otherwise push it higher.
-      const roomsCeiling = Math.min(a.bounds.max[2]!, b.bounds.max[2]!)
-      const ceiling = edge.height != null
-        ? Math.min(hiZ + edge.height, roomsCeiling)
-        : roomsCeiling
 
-      assertClearance(ceiling, hiZ, `connection between "${a.name}" and "${b.name}"`,
-        { a: a.name, b: b.name })
+      let aCeilingZ: number
+      let bCeilingZ: number
+      if (gapHi > gapLo) {
+        [aCeilingZ, bCeilingZ] = corridorCeilings(
+          a.floorZ, a.bounds.max[2]!, b.floorZ, b.bounds.max[2]!, edge.height)
+      } else {
+        // Flush rooms: one shared top, for the same reason as a flush
+        // placement doorway (see placeChild).
+        const roomsCeiling = Math.min(a.bounds.max[2]!, b.bounds.max[2]!)
+        const doorwayCeiling = edge.height != null
+          ? Math.min(hiZ + edge.height, roomsCeiling)
+          : roomsCeiling
+        assertClearance(doorwayCeiling, hiZ,
+          `connection between "${a.name}" and "${b.name}"`, { a: a.name, b: b.name })
+        aCeilingZ = doorwayCeiling
+        bCeilingZ = doorwayCeiling
+      }
 
       const pMin: Vec3 = [0, 0, loZ]
-      const pMax: Vec3 = [0, 0, ceiling]
+      const pMax: Vec3 = [0, 0, Math.max(aCeilingZ, bCeilingZ)]
       pMin[axis] = gapLo; pMax[axis] = gapHi
       pMin[other] = centre - edge.width / 2
       pMax[other] = centre + edge.width / 2
@@ -308,7 +361,8 @@ export function solve(graph: MapGraph): Layout {
         from: a.id, to: b.id,
         bounds: { min: pMin, max: pMax },
         axis, width: edge.width, height: edge.height,
-        fromZ: a.floorZ, toZ: b.floorZ, via: edge.via,
+        fromZ: a.floorZ, toZ: b.floorZ,
+        fromCeilingZ: aCeilingZ, toCeilingZ: bCeilingZ, via: edge.via,
       })
       return
     }

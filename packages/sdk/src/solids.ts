@@ -59,7 +59,6 @@ export function toSolids(layout: Layout): Solid[] {
     const other: 0 | 1 = passage.axis === 0 ? 1 : 0
     const lo = passage.bounds.min[other]!
     const hi = passage.bounds.max[other]!
-    const top = passage.bounds.max[2]!
 
     // Transition.Step lays one flat floor at the lower of the two rooms'
     // floors, so at the *higher* room's face the way through starts a whole
@@ -70,8 +69,14 @@ export function toSolids(layout: Layout): Solid[] {
     const bottomOf = (room: PlacedRoom) =>
       passage.via === Transition.Step ? lowZ : room.floorZ
 
-    addOpening(from.id, sideFacing(from, passage), { lo, hi, top, bottom: bottomOf(from) })
-    addOpening(to.id, sideFacing(to, passage), { lo, hi, top, bottom: bottomOf(to) })
+    // Each opening is cut to the corridor's own cross-section where it meets
+    // that room, which on anything that climbs is higher at the top end than
+    // at the bottom. The two are equal on a level corridor and on a flush
+    // doorway, which has no roof of its own.
+    addOpening(from.id, sideFacing(from, passage),
+      { lo, hi, top: passage.fromCeilingZ, bottom: bottomOf(from) })
+    addOpening(to.id, sideFacing(to, passage),
+      { lo, hi, top: passage.toCeilingZ, bottom: bottomOf(to) })
 
     if (passage.bounds.max[passage.axis]! > passage.bounds.min[passage.axis]!) {
       // Which physical end (bounds.min or bounds.max along the travel axis)
@@ -182,10 +187,18 @@ function corridorSolids(passage: Passage, fromAtMinEnd: boolean): Solid[] {
     }
   }
 
+  // The ceiling climbs with the floor (see corridorCeilings in solve.ts), so
+  // the two ends can sit at different heights. Which end is which follows the
+  // same derivation as the floor's.
+  const ceilAtMin = fromAtMinEnd ? passage.fromCeilingZ : passage.toCeilingZ
+  const ceilAtMax = fromAtMinEnd ? passage.toCeilingZ : passage.fromCeilingZ
+  const ceilLow = Math.min(ceilAtMin, ceilAtMax)
+  const ceilHigh = Math.max(ceilAtMin, ceilAtMax)
+
   // A corridor whose computed ceiling doesn't clear the lower end has no
   // meaningful side walls or ceiling to build; the floor geometry above
   // still marks it.
-  if (bounds.max[2]! > lowZ) {
+  if (ceilHigh > lowZ) {
     // Side walls run the full length of the corridor, outside its width.
     // They used to be inset by a wall's thickness at each end, on the
     // assumption that the adjoining room's own wall covers that 16-unit zone.
@@ -195,9 +208,15 @@ function corridorSolids(passage: Passage, fromAtMinEnd: boolean): Solid[] {
     // side at all. Running the full length instead duplicates brush where the
     // corridor meets each room's wall, which is untidy geometry; the inset
     // was a hole, which is a broken map.
+    //
+    // They run to the *higher* of the two ceilings rather than following the
+    // slope, so that a sloped run stays two boxes rather than becoming a box
+    // and a wedge per side. The extra material sits above the ceiling, out of
+    // the playable space, and squaring the walls off keeps the corridor's air
+    // bounded by flat faces at every height it reaches.
     for (const side of [-1, 1] as const) {
       const min: Vec3 = [0, 0, lowZ]
-      const max: Vec3 = [0, 0, bounds.max[2]!]
+      const max: Vec3 = [0, 0, ceilHigh]
       min[axis] = bounds.min[axis]!
       max[axis] = bounds.max[axis]!
       if (side === -1) {
@@ -210,8 +229,28 @@ function corridorSolids(passage: Passage, fromAtMinEnd: boolean): Solid[] {
       if (max[axis]! > min[axis]!) out.push(box(min, max, MATERIALS.wall))
     }
 
-    const ceilMin: Vec3 = [0, 0, bounds.max[2]!]
-    const ceilMax: Vec3 = [0, 0, bounds.max[2]! + SLAB_THICKNESS]
+    // The roof: a wedge hung upside down, its sloping underside carrying the
+    // clear height from one end to the other, and a flat slab over the top of
+    // it. On a level corridor the wedge is nothing and only the slab is
+    // emitted, exactly as before.
+    if (ceilHigh > ceilLow) {
+      const wedgeMin: Vec3 = [0, 0, ceilLow]
+      const wedgeMax: Vec3 = [0, 0, ceilHigh]
+      for (const i of [0, 1] as const) {
+        wedgeMin[i] = bounds.min[i]!
+        wedgeMax[i] = bounds.max[i]!
+      }
+      const ceilingRise: Cardinal = axis === 0
+        ? (ceilAtMax > ceilAtMin ? Direction.East : Direction.West)
+        : (ceilAtMax > ceilAtMin ? Direction.North : Direction.South)
+      out.push({
+        kind: 'wedge', min: wedgeMin, max: wedgeMax, rise: ceilingRise,
+        inverted: true, material: MATERIALS.ceiling,
+      })
+    }
+
+    const ceilMin: Vec3 = [0, 0, ceilHigh]
+    const ceilMax: Vec3 = [0, 0, ceilHigh + SLAB_THICKNESS]
     for (const i of [0, 1] as const) {
       ceilMin[i] = bounds.min[i]!
       ceilMax[i] = bounds.max[i]!

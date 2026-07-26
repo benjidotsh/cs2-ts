@@ -34,7 +34,7 @@ const PLAYER_HEIGHT = 64
  * their full bounding-box height produces false "blocked" collisions a
  * player would never actually hit.
  */
-function wedgeTopAt(s: WedgeSolid, x: number, y: number): number {
+function wedgeSlopeAt(s: WedgeSolid, x: number, y: number): number {
   const [x0, y0, z0] = s.min
   const [x1, y1, z1] = s.max
   switch (s.rise) {
@@ -49,8 +49,11 @@ function insideSolid(s: Solid, p: readonly [number, number, number]): boolean {
   if (p[0] <= s.min[0]! || p[0] >= s.max[0]!) return false
   if (p[1] <= s.min[1]! || p[1] >= s.max[1]!) return false
   if (s.kind === 'box') return p[2] > s.min[2]! && p[2] < s.max[2]!
-  const top = wedgeTopAt(s, p[0], p[1])
-  return p[2] > s.min[2]! && p[2] < top
+  const slope = wedgeSlopeAt(s, p[0], p[1])
+  // A ceiling wedge is solid above its slope, a ramp below it.
+  return s.inverted
+    ? p[2] > slope && p[2] < s.max[2]!
+    : p[2] > s.min[2]! && p[2] < slope
 }
 
 function insideAny(all: Solid[], p: readonly [number, number, number]): boolean {
@@ -62,17 +65,19 @@ function insideAny(all: Solid[], p: readonly [number, number, number]): boolean 
  * over open air/outside the map. `ceilingCap` excludes ceiling slabs and
  * lintels from the search — floor, ceiling and wall solids in this SDK all
  * carry the same dev material (see defaults.ts), so there is no material
- * tag to distinguish "floor" from "ceiling" by; a corridor's ceiling slab
- * sits strictly above its own clearance height (`passage.bounds.max[2]`),
- * so capping the search there is what keeps "the highest solid surface"
- * from picking the ceiling instead of the floor beneath it.
+ * tag to distinguish "floor" from "ceiling" by. The cap is the clear height
+ * at this exact point along the corridor, not one number for the whole run:
+ * a corridor's roof climbs with its floor, so a single cap taken from the
+ * high end would let a lintel at the low end read as a walking surface.
  */
 function surfaceHeightAt(all: Solid[], x: number, y: number, ceilingCap: number): number | null {
   let best: number | null = null
   for (const s of all) {
     if (x <= s.min[0]! || x >= s.max[0]!) continue
     if (y <= s.min[1]! || y >= s.max[1]!) continue
-    const top = s.kind === 'box' ? s.max[2]! : wedgeTopAt(s, x, y)
+    // An upside-down wedge is a ceiling; nothing stands on its underside.
+    if (s.kind === 'wedge' && s.inverted) continue
+    const top = s.kind === 'box' ? s.max[2]! : wedgeSlopeAt(s, x, y)
     if (top > ceilingCap + 1e-6) continue
     if (best === null || top > best) best = top
   }
@@ -170,7 +175,7 @@ test('every ramp or stair climbs monotonically from one floor to the other with 
   for (const passage of rising) {
     const from = roomsById.get(passage.from)!
     const to = roomsById.get(passage.to)!
-    assertMonotonicClimb(from, to, passage, sampleWalkingSurface(solids, passage))
+    assertMonotonicClimb(from, to, passage, sampleWalkingSurface(solids, passage, from))
   }
 })
 
@@ -194,7 +199,7 @@ test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
     const from = localLayout.rooms.find((r) => r.id === passage.from)!
     const to = localLayout.rooms.find((r) => r.id === passage.to)!
 
-    assertMonotonicClimb(from, to, passage, sampleWalkingSurface(localSolids, passage))
+    assertMonotonicClimb(from, to, passage, sampleWalkingSurface(localSolids, passage, from))
   },
 )
 
@@ -211,10 +216,9 @@ test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
  * which is meant to be hi.
  */
 function assertMonotonicClimb(from: PlacedRoom, to: PlacedRoom, passage: Passage, heights: number[]): void {
-  const axis = passage.axis
-  const fromAtAxisMin = from.bounds.max[axis]! <= passage.bounds.min[axis]! + 1e-6
-  const axisMinZ = fromAtAxisMin ? from.floorZ : to.floorZ
-  const axisMaxZ = fromAtAxisMin ? to.floorZ : from.floorZ
+  const atMin = fromAtAxisMin(from, passage)
+  const axisMinZ = atMin ? from.floorZ : to.floorZ
+  const axisMaxZ = atMin ? to.floorZ : from.floorZ
   const EPS = 0.5
 
   // Continuous at both ends: the corridor's floor at its very first and
@@ -236,13 +240,26 @@ function assertMonotonicClimb(from: PlacedRoom, to: PlacedRoom, passage: Passage
   expect(totalAbsDelta).toBeLessThanOrEqual(Math.abs(axisMaxZ - axisMinZ) + EPS)
 }
 
+/**
+ * Whether `from` sits at the passage's axis-min end, derived from the rooms'
+ * own placed bounds rather than from anything solids.ts computed.
+ */
+function fromAtAxisMin(from: PlacedRoom, passage: Passage): boolean {
+  return from.bounds.max[passage.axis]! <= passage.bounds.min[passage.axis]! + 1e-6
+}
+
 /** Walking-surface height sampled along a passage's own travel axis, corridor-width centred. */
-function sampleWalkingSurface(all: Solid[], passage: Passage): number[] {
+function sampleWalkingSurface(all: Solid[], passage: Passage, from: PlacedRoom): number[] {
   const axis = passage.axis
   const other: 0 | 1 = axis === 0 ? 1 : 0
   const axisMin = passage.bounds.min[axis]!
   const axisMax = passage.bounds.max[axis]!
   const centreOther = (passage.bounds.min[other]! + passage.bounds.max[other]!) / 2
+
+  // The clear height at each end, mapped onto the passage's own axis: the
+  // roof climbs with the floor, so the cap has to move with it.
+  const ceilAtMin = fromAtAxisMin(from, passage) ? passage.fromCeilingZ : passage.toCeilingZ
+  const ceilAtMax = fromAtAxisMin(from, passage) ? passage.toCeilingZ : passage.fromCeilingZ
 
   const STEPS = 200
   // Inset from the exact ends by a hair so the sample doesn't land exactly
@@ -254,7 +271,8 @@ function sampleWalkingSurface(all: Solid[], passage: Passage): number[] {
     const t = i / STEPS
     const pos = axisMin + inset + (axisMax - axisMin - 2 * inset) * t
     const point: [number, number] = axis === 0 ? [pos, centreOther] : [centreOther, pos]
-    const h = surfaceHeightAt(all, point[0], point[1], passage.bounds.max[2]!)
+    const cap = ceilAtMin + (ceilAtMax - ceilAtMin) * ((pos - axisMin) / (axisMax - axisMin))
+    const h = surfaceHeightAt(all, point[0], point[1], cap)
     if (h === null) {
       throw new Error(`no walking surface found along ramp at t=${t} (${point[0]}, ${point[1]})`)
     }

@@ -17,12 +17,14 @@ import type { Solid, Vec3, WedgeSolid } from '../../src/types'
  * decides the whole cell. There is no resolution to tune and nothing to
  * tunnel through.
  *
- * Wedges (ramps) are the one non-box shape. They are *under*-approximated by
- * inscribed steps of at most `WEDGE_STEP` units of rise, so the analyser
- * never claims sloped air is solid — it can only ever over-report leaks,
- * never miss one. `WEDGE_STEP` is kept below the floor slab thickness so the
- * sliver of air left above each inscribed step can't reach under the slab of
- * the room the ramp lands on and invent a leak that isn't there.
+ * Wedges (ramps, and the sloping ceilings over them) are the one non-box
+ * shape. They are *under*-approximated by inscribed steps of at most
+ * `WEDGE_STEP` units of rise, so the analyser never claims sloped air is
+ * solid — it can only ever over-report leaks, never miss one. `WEDGE_STEP` is
+ * kept below the slab thickness so the sliver of air left beside each
+ * inscribed step can't reach past the slab of the room the wedge lands
+ * against and invent a leak that isn't there — under the floor slab for a
+ * ramp, over the ceiling slab for a ceiling.
  */
 
 interface Box { min: Vec3; max: Vec3 }
@@ -41,11 +43,18 @@ function wedgeBoxes(w: WedgeSolid): Box[] {
 
   const out: Box[] = []
   for (let i = 0; i < n; i++) {
-    // The inscribed step's top is the slope's *lowest* height over the slice.
-    const top = z0 + (z1 - z0) * (ascending ? i : n - i - 1) / n
-    if (top <= z0) continue
-    const min: Vec3 = [0, 0, z0]
-    const max: Vec3 = [0, 0, top]
+    // Upright: the inscribed step's top is the slope's *lowest* height over
+    // the slice. Inverted (a ceiling): the solid is what's above the slope,
+    // so the inscribed step's bottom is the slope's *highest* height there.
+    const lo = w.inverted
+      ? z0 + (z1 - z0) * (ascending ? i + 1 : n - i) / n
+      : z0
+    const hi = w.inverted
+      ? z1
+      : z0 + (z1 - z0) * (ascending ? i : n - i - 1) / n
+    if (hi <= lo) continue
+    const min: Vec3 = [0, 0, lo]
+    const max: Vec3 = [0, 0, hi]
     min[axis] = a0 + (a1 - a0) * (i / n)
     max[axis] = a0 + (a1 - a0) * ((i + 1) / n)
     min[other] = w.min[other]!

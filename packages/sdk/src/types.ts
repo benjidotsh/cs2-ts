@@ -55,12 +55,21 @@ export interface BoxSolid {
   material: string
 }
 
-/** Triangular prism. Floor at `min[2]`, rising to `max[2]` toward `rise`. */
+/**
+ * Triangular prism. The sloped face runs from `min[2]` to `max[2]`, climbing
+ * toward `rise`, and is the same plane either way up:
+ *
+ * - upright (the default) fills the space **below** it — a ramp, flat on the
+ *   bottom, sloping on top;
+ * - `inverted` fills the space **above** it — a ceiling, flat on top, sloping
+ *   underneath.
+ */
 export interface WedgeSolid {
   kind: 'wedge'
   min: Vec3
   max: Vec3
   rise: Cardinal
+  inverted?: boolean
   material: string
 }
 

@@ -14,7 +14,7 @@ function rampMap(via: Transition) {
 
 test('a ramp emits a wedge rising toward the higher room', () => {
   const solids = toSolids(rampMap(Transition.Ramp))
-  const wedges = solids.filter((s) => s.kind === 'wedge')
+  const wedges = solids.filter((s) => s.kind === 'wedge' && !s.inverted)
   expect(wedges).toHaveLength(1)
   const w = wedges[0]!
   expect(w.kind).toBe('wedge')
@@ -22,6 +22,25 @@ test('a ramp emits a wedge rising toward the higher room', () => {
   expect(w.rise).toBe(Direction.North)
   expect(w.min[2]).toBe(0)
   expect(w.max[2]).toBe(64)
+})
+
+test('the ceiling over a ramp climbs with it, on the same slope', () => {
+  // Both rooms are 192 tall, so the clear height is 192: the roof runs from
+  // 192 at the low end to 256 at the high one, keeping 192 units of headroom
+  // the whole way rather than pinching down to 128 at the top.
+  const solids = toSolids(rampMap(Transition.Ramp))
+  const ceilings = solids.filter((s) => s.kind === 'wedge' && s.inverted)
+  expect(ceilings).toHaveLength(1)
+  const c = ceilings[0]!
+  if (c.kind !== 'wedge') throw new Error('unreachable')
+  expect(c.rise).toBe(Direction.North)
+  expect([c.min[2], c.max[2]]).toEqual([192, 256])
+  // Same footprint and same rise as the ramp under it, and the same 64 units
+  // of climb — that is what makes the clearance constant.
+  const ramp = solids.find((s) => s.kind === 'wedge' && !s.inverted)!
+  expect([c.min[0], c.min[1]]).toEqual([ramp.min[0], ramp.min[1]])
+  expect([c.max[0], c.max[1]]).toEqual([ramp.max[0], ramp.max[1]])
+  expect(c.max[2]! - c.min[2]!).toBe(ramp.max[2]! - ramp.min[2]!)
 })
 
 // Physically, whichever cardinal a connection's `direction` names always
@@ -40,11 +59,19 @@ test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
     a.room({ name: 'b', size: [512, 512, 192] },
       { direction, width: 128, length: 256, rise: 64, via: Transition.Ramp })
     const solids = toSolids(solve(map.graph))
-    const wedges = solids.filter((s) => s.kind === 'wedge')
+    const wedges = solids.filter((s) => s.kind === 'wedge' && !s.inverted)
     expect(wedges).toHaveLength(1)
     const w = wedges[0]!
     if (w.kind !== 'wedge') throw new Error('unreachable')
     expect(w.rise).toBe(direction)
+
+    // The ceiling has to climb the same way, or the corridor pinches shut at
+    // whichever end the roof failed to follow the floor to.
+    const ceilings = solids.filter((s) => s.kind === 'wedge' && s.inverted)
+    expect(ceilings).toHaveLength(1)
+    const c = ceilings[0]!
+    if (c.kind !== 'wedge') throw new Error('unreachable')
+    expect(c.rise).toBe(direction)
   },
 )
 
@@ -74,7 +101,9 @@ test('stairs land exactly on the upper floor when the rise is not a multiple of 
 
 test('a step transition keeps a flat slab, not a stair stack or a slope', () => {
   const solids = toSolids(rampMap(Transition.Step))
-  expect(solids.filter((s) => s.kind === 'wedge')).toHaveLength(0)
+  // No sloped *floor*: a step is a deliberate ledge. The roof above it still
+  // climbs to meet the higher room's opening at that room's own height.
+  expect(solids.filter((s) => s.kind === 'wedge' && !s.inverted)).toHaveLength(0)
 
   // One flat slab at the lower room's level, spanning the whole corridor.
   const slab = solids.filter(
@@ -100,4 +129,18 @@ test('level corridors emit no wedge', () => {
   a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length: 256 })
   expect(toSolids(solve(map.graph)).filter((s) => s.kind === 'wedge')).toHaveLength(0)
+})
+
+test('a level corridor between rooms of different heights keeps a flat roof', () => {
+  // Nothing climbs, so nothing about the ceiling may slope either — the roof
+  // sits at the shorter room's height, flat, exactly as it always has.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.room({ name: 'b', size: [512, 512, 320] },
+    { direction: Direction.North, width: 128, length: 256 })
+  const solids = toSolids(solve(map.graph))
+  expect(solids.filter((s) => s.kind === 'wedge')).toHaveLength(0)
+  const roof = solids.find(
+    (s) => s.min[1]! === 256 && s.max[1]! === 512 && s.min[2]! === 192)!
+  expect([roof.min[2], roof.max[2]]).toEqual([192, 208])
 })
