@@ -1,0 +1,8 @@
+{
+  "name": "@cs2-ts/examples",
+  "private": true,
+  "type": "module",
+  "dependencies": {
+    "@cs2-ts/sdk": "workspace:*"
+  }
+}

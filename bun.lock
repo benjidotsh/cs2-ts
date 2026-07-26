@@ -9,6 +9,12 @@
         "typescript": "7.0.2",
       },
     },
+    "examples": {
+      "name": "@cs2-ts/examples",
+      "dependencies": {
+        "@cs2-ts/sdk": "workspace:*",
+      },
+    },
     "packages/cli": {
       "name": "@cs2-ts/cli",
       "version": "0.1.0",
@@ -27,6 +33,8 @@
   },
   "packages": {
     "@cs2-ts/cli": ["@cs2-ts/cli@workspace:packages/cli"],
+
+    "@cs2-ts/examples": ["@cs2-ts/examples@workspace:examples"],
 
     "@cs2-ts/sdk": ["@cs2-ts/sdk@workspace:packages/sdk"],
 

@@ -2,7 +2,7 @@
   "name": "cs2-ts",
   "private": true,
   "type": "module",
-  "workspaces": ["packages/*"],
+  "workspaces": ["packages/*", "examples"],
   "scripts": {
     "typecheck": "tsc --noEmit",
     "test": "bun test"

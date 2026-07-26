@@ -2,6 +2,8 @@
 import { Command } from 'commander'
 import { findCs2Install, preflight } from './install'
 import { emitMap, initAddon } from './commands'
+import { compileMap, launchMap } from './compile'
+import { toWindowsPath } from './paths'
 
 const program = new Command()
   .name('cs2ts')
@@ -34,6 +36,40 @@ program.command('emit')
     const written = await emitMap({ file, out: opts.out, install, addon: opts.addon })
     console.log(`wrote ${written}`)
   })
+
+for (const [name, preset, description] of [
+  ['preview', 'preview', 'fast compile, then launch CS2'],
+  ['build', 'production', 'full compile with vis, nav and baked lighting'],
+] as const) {
+  program.command(name)
+    .description(description)
+    .argument('<file>', 'map definition module')
+    .requiredOption('--addon <name>', 'addon to build into')
+    .option('--cs2-dir <path>', 'path to the CS2 install')
+    .option('--lightmap-resolution <n>', 'max lightmap resolution', Number)
+    .option('--lightmap-quality <n>', 'VRAD3 quality', Number)
+    .action(async (file: string, opts: {
+      addon: string; cs2Dir?: string
+      lightmapResolution?: number; lightmapQuality?: number
+    }) => {
+      const install = await findCs2Install(opts.cs2Dir)
+      await preflight(install, opts.addon)
+
+      const written = await emitMap({ file, install, addon: opts.addon })
+      console.log(`wrote ${written}`)
+
+      await compileMap(install, preset, toWindowsPath(written), {
+        ...(opts.lightmapResolution !== undefined
+          ? { lightmapMaxResolution: opts.lightmapResolution } : {}),
+        ...(opts.lightmapQuality !== undefined
+          ? { lightmapVRadQuality: opts.lightmapQuality } : {}),
+      })
+
+      const mapName = written.split('/').pop()!.replace(/\.vmap$/, '')
+      console.log(`compiled ${mapName}`)
+      if (preset === 'preview') await launchMap(install, opts.addon, mapName)
+    })
+}
 
 program.parseAsync().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : String(error))
