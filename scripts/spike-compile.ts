@@ -47,3 +47,5 @@ console.error(result.stderr.toString())
 console.log('exit code:', result.exitCode)
 console.log('vpk exists:',
   await Bun.file(`${CS2}/game/csgo_addons/${ADDON}/maps/spike.vpk`).exists())
+
+await $`rm -rf ${`${CS2}/content/csgo_addons/${ADDON}`} ${`${CS2}/game/csgo_addons/${ADDON}`}`

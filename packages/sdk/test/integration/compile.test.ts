@@ -30,5 +30,13 @@ test.if(enabled)('a generated vmap compiles to a vpk', async () => {
   expect(result.exitCode).toBe(0)
   expect(await Bun.file(`${CS2}/game/csgo_addons/${ADDON}/maps/it.vpk`).exists()).toBe(true)
 
+  // Exit 0 and a written vpk are NOT proof of success: a mesh with broken
+  // topology compiles cleanly to an empty world. Assert real geometry.
+  const clusters = result.stdout.toString()
+    .match(/Building render clusters\.\.\. (\d+) meshes, (\d+) triangles/)
+  expect(clusters).not.toBeNull()
+  expect(Number(clusters![1])).toBeGreaterThan(0)
+  expect(Number(clusters![2])).toBeGreaterThan(0)
+
   await $`rm -rf ${`${CS2}/content/csgo_addons/${ADDON}`} ${`${CS2}/game/csgo_addons/${ADDON}`}`
 }, 300_000)
