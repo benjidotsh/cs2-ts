@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import exampleMap from '../../../examples/de_example'
+import { SPAWN_FLOOR_CLEARANCE } from '../src/defaults'
 import { roomEntities } from '../src/entities'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
@@ -110,12 +111,21 @@ test('every spawn point lies inside its room and is not inside any solid', () =>
       // below the floor slab: dropping straight down from z=0 to some large
       // negative offset lands in open air under the map (not inside any
       // solid), and clears the floor bounds check entirely since that only
-      // looks at x/y. A spawn has to sit exactly on the floor it's placed
-      // in, not merely outside of solids.
-      expect(z).toBeCloseTo(room.floorZ, 6)
+      // looks at x/y. A spawn has to sit a fixed clearance above the floor
+      // it's placed in, not merely outside of solids — sitting exactly ON
+      // the floor is what CS2 itself rejects (coplanar with the floor's top
+      // face reads as stuck in geometry to the engine's hull check), which
+      // is a distinct condition from being inside a solid and is exactly
+      // what let that bug ship undetected.
+      expect(z).toBeCloseTo(room.floorZ + SPAWN_FLOOR_CLEARANCE, 6)
+
+      // The point directly below the spawn must be solid ground (the floor
+      // slab), not open air — otherwise a spawn floating in mid-air with no
+      // floor under it at all would pass every check above.
+      expect(insideAny(solids, [x, y, room.floorZ - 1])).toBe(true)
 
       // Sample through a player's standing height (feet to head), not just
-      // the entity's origin, which sits exactly on the floor plane.
+      // the entity's origin, which sits a fixed clearance above the floor.
       for (const dz of [1, 36, 70]) {
         expect(insideAny(solids, [x, y, z + dz])).toBe(false)
       }

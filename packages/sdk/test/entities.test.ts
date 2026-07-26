@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
-import { layoutEntities, resolvePlacement } from '../src/entities'
+import { SPAWN_FLOOR_CLEARANCE } from '../src/defaults'
+import { layoutEntities, resolvePlacement, roomEntities } from '../src/entities'
 import { Align, Bombsite, Direction, Surface, Team, directionYaw } from '../src/types'
 import { AuthoringError } from '../src/errors'
 
@@ -78,6 +79,39 @@ test('spawns form a compact square-ish grid at the anchor', () => {
   expect(spawns).toHaveLength(10)
   expect(new Set(spawns.map((s) => s.origin[0])).size).toBe(4) // ceil(sqrt(10))
   for (const s of spawns) expect(s.angles).toEqual([0, 90, 0])
+})
+
+test('spawn origins sit a fixed clearance above the room floor, at several floor heights', () => {
+  // CS2 rejects a spawn coplanar with its floor (see defaults.ts), so every
+  // emitted spawn must sit exactly floorZ + SPAWN_FLOOR_CLEARANCE, at
+  // floorZ 0, 64 and 128 alike — 128 matches de_example's ctSpawn, which
+  // must land at 144.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] }) // floorZ 0
+  const b = a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 192, length: 256, rise: 64 }) // floorZ 64
+  const c = b.room({ name: 'c', size: [1024, 1024, 256] },
+    { direction: Direction.North, width: 256, length: 384, rise: 64 }) // floorZ 128
+
+  a.spawns(Team.T, { count: 1 })
+  b.spawns(Team.T, { count: 1 })
+  c.spawns(Team.CT, { count: 1 })
+
+  const layout = solve(map.graph)
+  const roomsById = new Map(layout.rooms.map((r) => [r.id, r]))
+  expect(roomsById.get(c.id)!.floorZ).toBe(128)
+
+  let checked = 0
+  for (const node of map.graph.rooms) {
+    const room = roomsById.get(node.id)!
+    const spawns = roomEntities(room, node).filter((e) => e.classname.startsWith('info_player_'))
+    expect(spawns.length).toBeGreaterThan(0)
+    for (const spawn of spawns) {
+      expect(spawn.origin[2]).toBe(room.floorZ + SPAWN_FLOOR_CLEARANCE)
+      checked++
+    }
+  }
+  expect(checked).toBe(3)
 })
 
 test('a grid too large for its room is an error, not a silent clip', () => {

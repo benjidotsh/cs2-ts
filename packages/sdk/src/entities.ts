@@ -1,4 +1,4 @@
-import { MATERIALS } from './defaults'
+import { MATERIALS, SPAWN_FLOOR_CLEARANCE } from './defaults'
 import { AuthoringError } from './errors'
 import type { MapGraph, RoomNode } from './map'
 import type { Layout, PlacedRoom } from './solve'
@@ -150,17 +150,22 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
     const gridMaxX = origin[0] + gridW / 2
     const gridMinY = origin[1] - gridH / 2
     const gridMaxY = origin[1] + gridH / 2
+    // Spawns are lifted off the floor (see SPAWN_FLOOR_CLEARANCE in
+    // defaults.ts); a room shorter than the clearance would push them into
+    // or above its own ceiling, so that has to fail the same fit check.
+    const spawnZ = origin[2] + SPAWN_FLOOR_CLEARANCE
 
     if (
       gridMinX < room.bounds.min[0]! || gridMaxX > room.bounds.max[0]! ||
-      gridMinY < room.bounds.min[1]! || gridMaxY > room.bounds.max[1]!
+      gridMinY < room.bounds.min[1]! || gridMaxY > room.bounds.max[1]! ||
+      spawnZ > room.bounds.max[2]!
     ) {
       throw new AuthoringError(
         'SPAWN_GRID_TOO_LARGE',
         `${req.count} spawns at ${req.spacing}u spacing in room "${room.name}" ` +
-        `span x:[${gridMinX},${gridMaxX}] y:[${gridMinY},${gridMaxY}], which ` +
+        `span x:[${gridMinX},${gridMaxX}] y:[${gridMinY},${gridMaxY}] z:${spawnZ}, which ` +
         `falls outside the room's bounds x:[${room.bounds.min[0]},${room.bounds.max[0]}] ` +
-        `y:[${room.bounds.min[1]},${room.bounds.max[1]}]`,
+        `y:[${room.bounds.min[1]},${room.bounds.max[1]}] z:[${room.bounds.min[2]},${room.bounds.max[2]}]`,
         { room: room.name, count: req.count, spacing: req.spacing },
       )
     }
@@ -173,7 +178,7 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
         origin: [
           origin[0] - gridW / 2 + col * req.spacing,
           origin[1] - gridH / 2 + row * req.spacing,
-          origin[2],
+          spawnZ,
         ],
         angles: [0, yaw, 0],
         properties: { priority: 0, enabled: true },
