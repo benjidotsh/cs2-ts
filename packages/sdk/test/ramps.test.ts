@@ -75,11 +75,23 @@ test('stairs land exactly on the upper floor when the rise is not a multiple of 
 test('a step transition keeps a flat slab, not a stair stack or a slope', () => {
   const solids = toSolids(rampMap(Transition.Step))
   expect(solids.filter((s) => s.kind === 'wedge')).toHaveLength(0)
-  const floorish = solids.filter(
-    (s) => s.kind === 'box' && s.min[1]! >= 256 && s.max[1]! <= 512 && s.max[2]! <= 64)
-  expect(floorish).toHaveLength(1)
-  expect(floorish[0]!.min[2]).toBe(-16)
-  expect(floorish[0]!.max[2]).toBe(0)
+
+  // One flat slab at the lower room's level, spanning the whole corridor.
+  const slab = solids.filter(
+    (s) => s.kind === 'box' && s.min[1]! === 256 && s.max[1]! === 512 && s.max[2]! <= 64)
+  expect(slab).toHaveLength(1)
+  expect(slab[0]!.min[2]).toBe(-16)
+  expect(slab[0]!.max[2]).toBe(0)
+
+  // And the ledge: the higher room's wall reaches down from its own floor to
+  // the corridor's, closing the doorway-wide gap under its floor slab. The
+  // wall itself only spans floorZ..ceilingZ, so without this the step opens
+  // into the void beneath the room.
+  const sill = solids.filter(
+    (s) => s.kind === 'box' && s.min[1]! === 496 && s.max[1]! === 512 &&
+      s.min[2]! === 0 && s.max[2]! === 64)
+  expect(sill).toHaveLength(1)
+  expect([sill[0]!.min[0], sill[0]!.max[0]]).toEqual([-64, 64])
 })
 
 test('level corridors emit no wedge', () => {

@@ -5,6 +5,8 @@ export type SolverErrorCode =
   | 'RISE_CONFLICT'
   | 'UNROUTABLE_CONNECTION'
   | 'CORRIDOR_TOO_SHORT'
+  | 'OUT_OF_BOUNDS'
+  | 'INSUFFICIENT_CLEARANCE'
 
 export type AuthoringErrorCode =
   | 'DUPLICATE_ANCHOR'

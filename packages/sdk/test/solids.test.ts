@@ -159,7 +159,9 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
     [1024, 768, 192], [512, 512, 192], [768, 640, 256],
   ]
   const widths = [64, 128, 192]
-  const heights = [0, 64, 128, 192]
+  // Height 0 is not in the sweep because it is rejected at authoring time: a
+  // connection with no height is not a doorway.
+  const heights = [16, 64, 128, 192]
   const rises = [0, 32, 96]
   const lengths = [0, 256]
   const transitions = [Transition.Step, Transition.Ramp, Transition.Stairs]
@@ -174,6 +176,8 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
               // has no room for a ramp or stairs and is rejected by the
               // solver (SLOPE_WITHOUT_RUN) — not a positive-volume concern.
               if (rise !== 0 && length === 0 && via !== Transition.Step) continue
+              // Likewise a Step taller than a player can climb (RISE_CONFLICT).
+              if (via === Transition.Step && Math.abs(rise) > 64) continue
               const map = new CS2Map('t')
               const a = map.room({ name: 'a', size })
               a.room({ name: 'b', size }, {
@@ -188,9 +192,19 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
   }
 })
 
+// The only brush this SDK is allowed to duplicate is the four corner columns
+// where a corridor's side walls run past the two rooms' facing walls. That
+// overlap is deliberate (see corridorSolids): insetting the side walls to
+// avoid it hands a 16-unit zone to a wall that may not cover it, which is a
+// hole rather than merely untidy geometry. Asserting the exact set of
+// overlaps, not just a total, keeps this from quietly absorbing a new one.
 test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
-  'solids never overlap each other, flush or corridor, facing %i',
+  'the only overlapping solids are the corridor/room wall corners, facing %i',
   (direction) => {
+    const WALL = 16
+    const CORRIDOR_HEIGHT = 192
+    const corner = WALL * WALL * CORRIDOR_HEIGHT
+
     for (const length of [0, 32, 256]) {
       const map = new CS2Map('t')
       const a = map.room({ name: 'a', size: [512, 512, 192] })
@@ -198,13 +212,16 @@ test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
         { direction, width: 128, length })
       const solids = toSolids(solve(map.graph))
 
-      let total = 0
+      const overlaps: number[] = []
       for (let i = 0; i < solids.length; i++) {
         for (let j = i + 1; j < solids.length; j++) {
-          total += overlapVolume(solids[i]!, solids[j]!)
+          const v = overlapVolume(solids[i]!, solids[j]!)
+          if (v > 0) overlaps.push(v)
         }
       }
-      expect(total).toBe(0)
+
+      // Flush rooms have no corridor and so no side walls to overlap with.
+      expect(overlaps).toEqual(length === 0 ? [] : [corner, corner, corner, corner])
     }
   },
 )

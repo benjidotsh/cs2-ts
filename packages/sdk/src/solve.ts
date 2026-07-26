@@ -1,4 +1,4 @@
-import { WALL_THICKNESS } from './defaults'
+import { MAX_STEP_RISE, WALL_THICKNESS, WORLD_LIMIT } from './defaults'
 import { SolverError } from './errors'
 import type { CrossEdge, MapGraph, PlacementEdge, RoomNode } from './map'
 import {
@@ -79,6 +79,7 @@ export function solve(graph: MapGraph): Layout {
   }
 
   detectOverlaps()
+  checkWorldBounds()
 
   return {
     name: graph.name,
@@ -116,8 +117,8 @@ export function solve(graph: MapGraph): Layout {
       throw new SolverError(
         'SLOPE_WITHOUT_RUN',
         `connection from "${parent.name}" to "${child.name}" has rise ${c.rise} ` +
-        'but length 0, leaving no room for a ramp or stairs; give it length or ' +
-        'use Transition.Step',
+        'but length 0, leaving no room for a ramp or stairs to climb it; give it a ' +
+        `length of at least ${Math.abs(c.rise)} units`,
         { parent: parent.name, child: child.name, rise: c.rise },
       )
     }
@@ -128,6 +129,20 @@ export function solve(graph: MapGraph): Layout {
         `connection from "${parent.name}" to "${child.name}" rises ${Math.abs(c.rise)} ` +
         `units over ${c.length} units of run, steeper than 1:1`,
         { parent: parent.name, child: child.name, rise: c.rise, run: c.length },
+      )
+    }
+
+    // Transition.Step is a single ledge, however long the connection is: the
+    // corridor floor stays at the lower room's level and the step happens at
+    // the higher room's face. Beyond what a player can step or jump that is a
+    // wall, not a route — the same rule cross edges already apply.
+    if (c.via === Transition.Step && Math.abs(c.rise) > MAX_STEP_RISE) {
+      throw new SolverError(
+        'RISE_CONFLICT',
+        `connection from "${parent.name}" to "${child.name}" steps ${Math.abs(c.rise)} ` +
+        `units in one go, more than the ${MAX_STEP_RISE} units a player can step or ` +
+        'jump; use Transition.Ramp or Transition.Stairs with enough length to climb it',
+        { parent: parent.name, child: child.name, rise: c.rise, via: c.via },
       )
     }
 
@@ -174,6 +189,10 @@ export function solve(graph: MapGraph): Layout {
     const passageCeiling = c.height != null
       ? Math.min(Math.max(parent.floorZ, floorZ) + c.height, roomsCeiling)
       : roomsCeiling
+
+    assertClearance(passageCeiling, Math.max(parent.floorZ, floorZ),
+      `connection from "${parent.name}" to "${child.name}"`,
+      { parent: parent.name, child: child.name })
 
     if (c.length > 0) {
       const centre = (span.lo + span.hi) / 2
@@ -252,7 +271,7 @@ export function solve(graph: MapGraph): Layout {
       if (deltaZ > 0) {
         const run = gapHi - gapLo
         const traversable = edge.via === Transition.Step
-          ? deltaZ <= 64                    // a player can jump 64 units; beyond that it is a wall
+          ? deltaZ <= MAX_STEP_RISE         // beyond a step or a jump it is a wall
           : run > 0 && deltaZ <= run        // ramps and stairs need run, and no steeper than 1:1
         if (!traversable) {
           throw new SolverError(
@@ -275,6 +294,9 @@ export function solve(graph: MapGraph): Layout {
       const ceiling = edge.height != null
         ? Math.min(hiZ + edge.height, roomsCeiling)
         : roomsCeiling
+
+      assertClearance(ceiling, hiZ, `connection between "${a.name}" and "${b.name}"`,
+        { a: a.name, b: b.name })
 
       const pMin: Vec3 = [0, 0, loZ]
       const pMax: Vec3 = [0, 0, ceiling]
@@ -308,6 +330,64 @@ export function solve(graph: MapGraph): Layout {
       `with at least ${edge.width} units of overlap on the other`,
       { a: a.name, b: b.name, width: edge.width },
     )
+  }
+
+  /**
+   * A way through needs clear height above the higher of the two floors it
+   * joins. A corridor never rises above the lower of the two rooms' own
+   * ceilings, so a rise that takes one room's floor up to (or past) the
+   * other's ceiling leaves a doorway with no opening in it: geometry that
+   * seals cleanly and is simply unreachable, which is the worst way for this
+   * to fail.
+   */
+  function assertClearance(
+    ceiling: number,
+    floorTop: number,
+    what: string,
+    detail: Record<string, unknown>,
+  ): void {
+    if (ceiling > floorTop) return
+    throw new SolverError(
+      'INSUFFICIENT_CLEARANCE',
+      `${what} has no clear height: the way through tops out at ${ceiling}, at or ` +
+      `below the higher of the two floors (${floorTop}). Reduce the rise, make the ` +
+      'lower room taller, or raise the connection height.',
+      { ...detail, ceiling, floor: floorTop },
+    )
+  }
+
+  /**
+   * Rooms are placed relative to their parent, so a long chain of connections
+   * walks away from the origin without anything noticing. Source cannot
+   * represent geometry past +/-16384 on any axis, and a map that runs past it
+   * fails in the compiler (or worse, silently) rather than here.
+   */
+  function checkWorldBounds(): void {
+    const AXES = ['x', 'y', 'z'] as const
+
+    const check = (bounds: Aabb, what: string, detail: Record<string, unknown>) => {
+      for (let k = 0; k < 3; k++) {
+        for (const value of [bounds.min[k]!, bounds.max[k]!]) {
+          if (Math.abs(value) <= WORLD_LIMIT) continue
+          throw new SolverError(
+            'OUT_OF_BOUNDS',
+            `${what} reaches ${value} on the ${AXES[k]} axis, outside Source's ` +
+            `+/-${WORLD_LIMIT} unit world; move it nearer the anchor room or shorten ` +
+            'the chain of connections leading to it',
+            { ...detail, axis: AXES[k], value, limit: WORLD_LIMIT },
+          )
+        }
+      }
+    }
+
+    for (const room of placed.values()) {
+      check(room.bounds, `room "${room.name}"`, { room: room.name })
+    }
+    for (const passage of passages) {
+      const between = `"${name(passage.from)}" and "${name(passage.to)}"`
+      check(passage.bounds, `the corridor between ${between}`,
+        { rooms: [name(passage.from), name(passage.to)] })
+    }
   }
 
   function detectOverlaps(): void {

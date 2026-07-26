@@ -66,6 +66,32 @@ test('a rejected diagonal leaves no partial room in the graph', () => {
   expect(map.graph.placements).toHaveLength(0)
 })
 
+// height 0 is not "no height", it is a doorway with no clear height at all:
+// the room emits a floor slab, no side walls and no ceiling, and the lintel
+// above the opening then seals the doorway shut. Rejecting it is the only
+// coherent answer.
+test.each([0, -64])('a connection height of %i is rejected on both edge kinds', (height) => {
+  const map = new CS2Map('de_test')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  const b = a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 256 })
+
+  for (const attempt of [
+    () => a.room({ name: 'c', size: [512, 512, 192] },
+      { direction: Direction.East, width: 128, length: 256, height }),
+    () => map.connect(a, b, { width: 128, height }),
+  ]) {
+    try {
+      attempt()
+      throw new Error('expected the connection to be rejected')
+    } catch (e) {
+      expect(e).toBeInstanceOf(AuthoringError)
+      expect((e as AuthoringError).code).toBe('NEGATIVE_HEIGHT')
+      expect((e as AuthoringError).detail.height).toBe(height)
+    }
+  }
+})
+
 test('cross connections are recorded separately from placements', () => {
   const map = new CS2Map('de_test')
   const a = map.room({ name: 'a', size: [512, 512, 192] })

@@ -27,10 +27,17 @@ export function subtractIntervals(span: Interval, holes: Interval[]): Interval[]
 const box = (min: Vec3, max: Vec3, material: string): BoxSolid =>
   ({ kind: 'box', min, max, material })
 
-/** An opening in one wall of one room: a horizontal span and a height. */
+/** An opening in one wall of one room: a horizontal span and a height range. */
 interface Opening {
   lo: number
   hi: number
+  /**
+   * Floor level of whatever the opening leads onto, measured at this room's
+   * own face. Equal to the room's `floorZ` for everything that climbs to meet
+   * the room where it stands; lower than it when the way through starts below
+   * the room's floor, which is what the sill in `roomSolids` then fills in.
+   */
+  bottom: number
   top: number
 }
 
@@ -54,8 +61,17 @@ export function toSolids(layout: Layout): Solid[] {
     const hi = passage.bounds.max[other]!
     const top = passage.bounds.max[2]!
 
-    addOpening(from.id, sideFacing(from, passage), { lo, hi, top })
-    addOpening(to.id, sideFacing(to, passage), { lo, hi, top })
+    // Transition.Step lays one flat floor at the lower of the two rooms'
+    // floors, so at the *higher* room's face the way through starts a whole
+    // rise below that room's own floor — the wall there has to reach down to
+    // meet it. Ramps and stairs climb to each room's floor at its own face,
+    // so their openings start level with it.
+    const lowZ = Math.min(passage.fromZ, passage.toZ)
+    const bottomOf = (room: PlacedRoom) =>
+      passage.via === Transition.Step ? lowZ : room.floorZ
+
+    addOpening(from.id, sideFacing(from, passage), { lo, hi, top, bottom: bottomOf(from) })
+    addOpening(to.id, sideFacing(to, passage), { lo, hi, top, bottom: bottomOf(to) })
 
     if (passage.bounds.max[passage.axis]! > passage.bounds.min[passage.axis]!) {
       // Which physical end (bounds.min or bounds.max along the travel axis)
@@ -170,15 +186,20 @@ function corridorSolids(passage: Passage, fromAtMinEnd: boolean): Solid[] {
   // meaningful side walls or ceiling to build; the floor geometry above
   // still marks it.
   if (bounds.max[2]! > lowZ) {
-    // Side walls run the length of the corridor, outside its width, inset by
-    // a wall's thickness at each end so they sit between the two rooms' own
-    // walls rather than inside them. A corridor exactly `2 * WALL_THICKNESS`
-    // long needs none — the two rooms' walls already meet with no gap.
+    // Side walls run the full length of the corridor, outside its width.
+    // They used to be inset by a wall's thickness at each end, on the
+    // assumption that the adjoining room's own wall covers that 16-unit zone.
+    // It does not: a room's wall starts at that room's floor, so anything
+    // with a rise leaves the zone open below the higher floor, and a doorway
+    // as wide as the shared face leaves the room emitting no wall on that
+    // side at all. Running the full length instead duplicates brush where the
+    // corridor meets each room's wall, which is untidy geometry; the inset
+    // was a hole, which is a broken map.
     for (const side of [-1, 1] as const) {
       const min: Vec3 = [0, 0, lowZ]
       const max: Vec3 = [0, 0, bounds.max[2]!]
-      min[axis] = bounds.min[axis]! + WALL_THICKNESS
-      max[axis] = bounds.max[axis]! - WALL_THICKNESS
+      min[axis] = bounds.min[axis]!
+      max[axis] = bounds.max[axis]!
       if (side === -1) {
         min[other] = bounds.min[other]! - WALL_THICKNESS
         max[other] = bounds.min[other]!
@@ -244,15 +265,27 @@ function roomSolids(room: PlacedRoom, openings: Map<string, Opening[]>): Solid[]
       out.push(box(min, max, MATERIALS.wall))
     }
 
-    // A lintel spans the gap above any opening that stops short of the ceiling.
+    // A lintel spans the gap above any opening that stops short of the
+    // ceiling, and a sill the gap below any opening that starts below this
+    // room's own floor. The wall pieces above only cover floorZ..ceilingZ, so
+    // without the sill a doorway onto a lower floor — a Transition.Step up
+    // into this room — opens straight into the unbounded space beneath the
+    // room's floor slab, which no solid owns.
     for (const hole of holes) {
-      if (hole.top >= ceilingZ) continue
-      const min: Vec3 = [0, 0, hole.top]
-      const max: Vec3 = [0, 0, ceilingZ]
-      min[axis] = wallMinAxis; max[axis] = wallMaxAxis
-      min[other] = Math.max(hole.lo, span.lo)
-      max[other] = Math.min(hole.hi, span.hi)
-      if (max[other]! > min[other]!) out.push(box(min, max, MATERIALS.wall))
+      const lo = Math.max(hole.lo, span.lo)
+      const hi = Math.min(hole.hi, span.hi)
+      if (hi <= lo) continue
+      const caps: Array<[number, number]> = []
+      if (hole.top < ceilingZ) caps.push([hole.top, ceilingZ])
+      if (hole.bottom < floorZ) caps.push([hole.bottom, floorZ])
+
+      for (const [zMin, zMax] of caps) {
+        const min: Vec3 = [0, 0, zMin]
+        const max: Vec3 = [0, 0, zMax]
+        min[axis] = wallMinAxis; max[axis] = wallMaxAxis
+        min[other] = lo; max[other] = hi
+        out.push(box(min, max, MATERIALS.wall))
+      }
     }
   }
 

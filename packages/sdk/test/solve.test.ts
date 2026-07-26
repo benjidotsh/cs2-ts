@@ -131,11 +131,56 @@ test('a placement rise steeper than its run is a rise conflict', () => {
 })
 
 test('a placement rise exactly equal to its run (1:1) is accepted', () => {
+  // The rooms are 512 tall so that a 256-unit rise still leaves clear height
+  // through the doorway; the point under test is the 1:1 slope boundary, and
+  // a 192-tall room would fail the separate clearance check first.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 512] })
+  a.room({ name: 'b', size: [512, 512, 512] },
+    { direction: Direction.North, width: 128, length: 256, rise: 256 })
+  expect(() => solve(map.graph)).not.toThrow()
+})
+
+// Found by the seal sweep, which flagged these layouts as sealed but with the
+// second room unreachable: a corridor is capped at the lower of the two
+// rooms' ceilings, so a rise that lifts one floor to the other room's ceiling
+// leaves a doorway with no opening in it. It compiled, and you could not get
+// through it.
+test('a rise that reaches the other room\'s ceiling leaves no clearance', () => {
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   a.room({ name: 'b', size: [512, 512, 192] },
-    { direction: Direction.North, width: 128, length: 256, rise: 256 })
-  expect(() => solve(map.graph)).not.toThrow()
+    { direction: Direction.North, width: 128, length: 256, rise: 192 })
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    expect((e as SolverError).code).toBe('INSUFFICIENT_CLEARANCE')
+    expect((e as SolverError).detail).toMatchObject({ ceiling: 192, floor: 192 })
+  }
+})
+
+test('a cross connection with no clear height above the higher floor is rejected', () => {
+  // Both placement edges are fine on their own: "ground" is short but level
+  // with "north", and "east" rises only 128 inside a room tall enough to take
+  // it. The cross edge is the one that pairs a floor at 128 with a ceiling at
+  // 128 — and its run is long enough that traversability is not the problem.
+  const map = new CS2Map('t')
+  const ground = map.room({ name: 'ground', size: [2048, 512, 128] })
+  const north = ground.room({ name: 'north', size: [512, 512, 1024] },
+    { direction: Direction.North, width: 128, length: 256 })
+  const east = north.room({ name: 'east', size: [512, 512, 512] },
+    { direction: Direction.East, width: 128, length: 256, rise: 128 })
+  map.connect(ground, east, { width: 128 })
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    expect((e as SolverError).code).toBe('INSUFFICIENT_CLEARANCE')
+    expect((e as SolverError).detail).toMatchObject({ a: 'ground', b: 'east' })
+  }
 })
 
 test('a corridor driving through a third room is an overlap', () => {
@@ -211,10 +256,13 @@ test('a flush cross connection with a height difference and a ramp is a rise con
 })
 
 test('a stepped cross connection with a 128-unit rise is a rise conflict', () => {
+  // The 128 units of height come in over a ramp with run to spare, so the
+  // only thing left for the solver to object to is the *cross* edge trying to
+  // step them in one go.
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   const b = a.room({ name: 'b', size: [512, 512, 192] },
-    { direction: Direction.North, width: 128, length: 0, rise: 128, via: Transition.Step })
+    { direction: Direction.North, width: 128, length: 256, rise: 128, via: Transition.Ramp })
   map.connect(a, b, { width: 128, via: Transition.Step })
   try {
     solve(map.graph)
@@ -239,5 +287,80 @@ test('a ramped cross connection with ample run for its rise is accepted', () => 
   const raised = hub.room({ name: 'raised', size: [512, 512, 192] },
     { direction: Direction.East, width: 128, length: 256, rise: 64 })
   map.connect(hub, raised, { width: 128 })
+  expect(() => solve(map.graph)).not.toThrow()
+})
+
+// Transition.Step is one ledge however much run the connection has: the
+// corridor floor stays level with the lower room and the whole rise happens
+// at the higher room's face. Placement edges used to be exempt from the rule
+// cross edges already applied, so a 300-unit step read as a valid route.
+test.each([0, 256])('a placement step taller than a player is a rise conflict, length %i', (length) => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length, rise: 128, via: Transition.Step })
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    expect((e as SolverError).code).toBe('RISE_CONFLICT')
+  }
+})
+
+test('a placement step a player can climb is accepted', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 0, rise: 64, via: Transition.Step })
+  expect(() => solve(map.graph)).not.toThrow()
+})
+
+test('the remediation for a rise with no run does not point at Transition.Step', () => {
+  // Suggesting Step here used to send authors straight into a 300-unit ledge
+  // that the geometry could not seal and no player could climb.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 0, rise: 300 })
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect((e as SolverError).code).toBe('SLOPE_WITHOUT_RUN')
+    expect((e as SolverError).message).not.toContain('Step')
+    expect((e as SolverError).message).toContain('length of at least 300 units')
+  }
+})
+
+test('a layout that runs past the edge of the world is rejected, naming the room and axis', () => {
+  // Rooms are placed relative to their parent, so nothing stops a chain of
+  // connections from walking clean off the far side of Source's world.
+  const map = new CS2Map('t')
+  let room = map.room({ name: 'r0', size: [1024, 1024, 192] })
+  for (let i = 1; i < 70; i++) {
+    room = room.room({ name: `r${i}`, size: [1024, 1024, 192] },
+      { direction: Direction.East, width: 128, length: 0 })
+  }
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    const error = e as SolverError
+    expect(error.code).toBe('OUT_OF_BOUNDS')
+    expect(error.detail.axis).toBe('x')
+    expect(error.message).toMatch(/room "r\d+"/)
+    expect(Math.abs(error.detail.value as number)).toBeGreaterThan(16384)
+  }
+})
+
+test('a layout that fits inside the world is not rejected', () => {
+  const map = new CS2Map('t')
+  let room = map.room({ name: 'r0', size: [1024, 1024, 192] })
+  for (let i = 1; i < 16; i++) {
+    room = room.room({ name: `r${i}`, size: [1024, 1024, 192] },
+      { direction: Direction.East, width: 128, length: 0 })
+  }
   expect(() => solve(map.graph)).not.toThrow()
 })

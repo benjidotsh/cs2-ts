@@ -162,11 +162,12 @@ export class CS2Map {
         { parent: parent.name, child: spec.name, direction: connection.direction },
       )
     }
-    if (connection.height != null && connection.height < 0) {
+    if (connection.height != null && connection.height <= 0) {
       throw new AuthoringError(
         'NEGATIVE_HEIGHT',
-        `connection from "${parent.name}" to "${spec.name}" has negative height ` +
-        `${connection.height}`,
+        `connection from "${parent.name}" to "${spec.name}" has height ` +
+        `${connection.height}; a connection's height is the clear height of the way ` +
+        'through and must be greater than 0',
         { parent: parent.name, child: spec.name, height: connection.height },
       )
     }
@@ -189,10 +190,12 @@ export class CS2Map {
 
   /** Connects two already-placed rooms, closing a cycle. */
   connect(a: Room, b: Room, opts: CrossConnection): void {
-    if (opts.height != null && opts.height < 0) {
+    if (opts.height != null && opts.height <= 0) {
       throw new AuthoringError(
         'NEGATIVE_HEIGHT',
-        `connection between "${a.name}" and "${b.name}" has negative height ${opts.height}`,
+        `connection between "${a.name}" and "${b.name}" has height ${opts.height}; ` +
+        "a connection's height is the clear height of the way through and must be " +
+        'greater than 0',
         { a: a.name, b: b.name, height: opts.height },
       )
     }

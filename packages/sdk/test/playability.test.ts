@@ -6,7 +6,8 @@ import { solve } from '../src/solve'
 import type { Passage, PlacedRoom } from '../src/solve'
 import { toSolids } from '../src/solids'
 import { Direction } from '../src/types'
-import type { Solid, WedgeSolid } from '../src/types'
+import type { Solid, Vec3, WedgeSolid } from '../src/types'
+import { analyseSeal } from './support/seal'
 
 /**
  * This is the substitute for the human walkthrough Task 17 hands off to a
@@ -262,42 +263,22 @@ function sampleWalkingSurface(all: Solid[], passage: Passage): number[] {
   return heights
 }
 
-test('the playable space is sealed: a ray from every room centre hits a solid before leaving the map', () => {
-  const MARGIN = 256
-  const STEP = 4
-
-  const globalMin: [number, number] = [Infinity, Infinity]
-  const globalMax: [number, number] = [-Infinity, -Infinity]
-  for (const s of solids) {
-    globalMin[0] = Math.min(globalMin[0], s.min[0]!)
-    globalMin[1] = Math.min(globalMin[1], s.min[1]!)
-    globalMax[0] = Math.max(globalMax[0], s.max[0]!)
-    globalMax[1] = Math.max(globalMax[1], s.max[1]!)
-  }
-
-  for (const room of layout.rooms) {
+test('the playable space is sealed: nothing reachable from a room centre gets out', () => {
+  // This used to march a ray from each room centre in the four cardinal
+  // directions at one height. Four lines through a map cannot see a leak you
+  // reach by stepping sideways first, and this map had one: an aperture beside
+  // the ramp into aSite, open to the void under that room's raised floor. The
+  // flood fill in ./support/seal walks every connected pocket of air instead.
+  // The matrix in seal.test.ts covers the layouts the example doesn't.
+  const seeds: Vec3[] = layout.rooms.map((room) => {
     const [cx, cy] = centre(room)
-    const z = room.floorZ + PLAYER_HEIGHT
+    return [cx, cy, room.floorZ + PLAYER_HEIGHT]
+  })
 
-    const directions: Array<[number, number]> = [[1, 0], [-1, 0], [0, 1], [0, -1]]
-    for (const [dx, dy] of directions) {
-      const bound = dx === 1 ? globalMax[0] + MARGIN
-        : dx === -1 ? globalMin[0] - MARGIN
-        : dy === 1 ? globalMax[1] + MARGIN
-        : globalMin[1] - MARGIN
+  const analysis = analyseSeal(solids, seeds)
+  expect(analysis.leak).toBeNull()
 
-      let hit = false
-      let x = cx, y = cy
-      // Distance from the room centre to its own direction-relevant bound,
-      // plus margin, sets how far a genuine leak would have to go undetected.
-      const limit = dx !== 0 ? Math.abs(bound - cx) : Math.abs(bound - cy)
-      for (let d = 0; d <= limit; d += STEP) {
-        x = cx + dx * d
-        y = cy + dy * d
-        if (insideAny(solids, [x, y, z])) { hit = true; break }
-      }
-
-      expect(hit).toBe(true)
-    }
-  }
+  // The specific point the final review escaped through: beside the mid→aSite
+  // ramp, 60 units up, below aSite's floor at 128. It must now be solid.
+  expect(analysis.solidAt([1370, 890, 60])).toBe(true)
 })
