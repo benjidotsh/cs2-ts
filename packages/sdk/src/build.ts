@@ -6,14 +6,20 @@ import { toSolids } from './solids'
 import type { Solid, Vec3 } from './types'
 import { serializeVmap, type VmapEntity } from './vmap/document'
 
-/** A generous box around everything, tagged for the lightmap resolution pass. */
+/**
+ * A generous box around everything, tagged for the lightmap resolution pass.
+ * Unions the actual emitted solids (walls, corridors, ramps, stairs — not
+ * just room bounds), so enclosing the compiled geometry is structural rather
+ * than a coincidence of wall thickness staying inside the padding.
+ */
 export function lightmapVolumeSolid(layout: Layout): Solid {
+  const solids = toSolids(layout)
   const min: Vec3 = [Infinity, Infinity, Infinity]
   const max: Vec3 = [-Infinity, -Infinity, -Infinity]
-  for (const room of layout.rooms) {
+  for (const solid of solids) {
     for (const i of [0, 1, 2] as const) {
-      min[i] = Math.min(min[i], room.bounds.min[i]!)
-      max[i] = Math.max(max[i], room.bounds.max[i]!)
+      min[i] = Math.min(min[i], solid.min[i]!)
+      max[i] = Math.max(max[i], solid.max[i]!)
     }
   }
   if (!Number.isFinite(min[0])) {
@@ -33,7 +39,12 @@ export function lightmapVolumeSolid(layout: Layout): Solid {
  * map is either black or unplayable, so these are injected rather than authored.
  */
 export function boilerplateEntities(layout: Layout): VmapEntity[] {
-  const top = layout.rooms.reduce((z, r) => Math.max(z, r.bounds.max[2]!), 0)
+  // Seeded with -Infinity so an entirely below-zero map still puts the sun
+  // above its own ceiling; 0 is only the right fallback when there are no
+  // rooms at all.
+  const top = layout.rooms.length === 0
+    ? 0
+    : layout.rooms.reduce((z, r) => Math.max(z, r.bounds.max[2]!), -Infinity)
   return [
     {
       classname: 'light_environment',
@@ -52,7 +63,12 @@ export function boilerplateEntities(layout: Layout): VmapEntity[] {
       classname: 'env_sky',
       origin: [0, 0, top + 512],
       angles: [0, 0, 0],
-      properties: { skyname: 'materials/skybox/sky_day01_01.vmat', enabled: true },
+      // sky_day01_01 is a CS:GO skyname absent from CS2's own VPKs; using it
+      // here compiles fine but the sky asset fails to load at runtime.
+      // sky_csgo_cloudy01 is one CS2 actually ships. (worldspawn's own
+      // "skyname" keyvalue elsewhere is a separate, inert Source 1 legacy
+      // key that CS2 ignores — left alone.)
+      properties: { skyname: 'materials/skybox/sky_csgo_cloudy01.vmat', enabled: true },
     },
     {
       classname: 'info_map_parameters',
@@ -68,9 +84,17 @@ export function buildVmap(map: CS2Map): string {
   const solids = toSolids(layout)
   solids.push(lightmapVolumeSolid(layout))
 
+  // An explicitly authored classname is a deliberate override — skip
+  // injecting the boilerplate version so e.g. a hand-authored
+  // light_environment doesn't end up doubled (two suns double the lighting
+  // bake; two info_map_parameters is undefined behaviour).
+  const authored = layoutEntities(layout, map.graph)
+  const taken = new Set(authored.map((e) => e.classname))
+  const injected = boilerplateEntities(layout).filter((e) => !taken.has(e.classname))
+
   return serializeVmap({
     name: layout.name,
     solids,
-    entities: [...layoutEntities(layout, map.graph), ...boilerplateEntities(layout)],
+    entities: [...authored, ...injected],
   })
 }

@@ -3,6 +3,8 @@ import { $ } from 'bun'
 import { serializeVmap } from '../../src/vmap/document'
 import { buildVmap } from '../../src/build'
 import { CS2Map } from '../../src/map'
+import { solve } from '../../src/solve'
+import { toSolids } from '../../src/solids'
 import { Direction, Team } from '../../src/types'
 
 const CS2 = '/mnt/c/Program Files (x86)/Steam/steamapps/common/Counter-Strike Global Offensive'
@@ -22,6 +24,22 @@ function finalClusterCounts(stdout: string): { meshes: number; triangles: number
   const matches = [...stdout.matchAll(/Building render clusters\.\.\. (\d+) meshes, (\d+) triangles/g)]
   const last = matches.at(-1)
   return last ? { meshes: Number(last[1]), triangles: Number(last[2]) } : null
+}
+
+/**
+ * The compiler reports "Failed loading resource ..." for any asset it can't
+ * open — including a bad skyname/material path, which is exactly the class
+ * of bug this guards against. This install unconditionally fails to load
+ * "scripts/detail_prop_types.vdata_c" on every single compile, verified
+ * against a bare box with zero entities that references no skybox or custom
+ * material at all — it's engine-startup noise specific to this dev install,
+ * not something any generated vmap could cause or fix. It's excluded by name
+ * so the check still catches every other resource failure, rather than
+ * failing unconditionally regardless of the SDK's output.
+ */
+function unexpectedResourceFailures(stdout: string): string[] {
+  const failures = stdout.match(/Failed loading resource "[^"]+"/g) ?? []
+  return failures.filter((f) => !f.includes('detail_prop_types.vdata_c'))
 }
 
 // Mirrors build.test.ts's example() — kept local rather than imported so that
@@ -63,12 +81,18 @@ test.if(enabled)('a generated vmap compiles to a vpk', async () => {
     expect(result.exitCode).toBe(0)
     expect(await Bun.file(`${CS2}/game/csgo_addons/${ADDON}/maps/it.vpk`).exists()).toBe(true)
 
+    const stdout = result.stdout.toString()
+
     // Exit 0 and a written vpk are NOT proof of success: a mesh with broken
     // topology compiles cleanly to an empty world. Assert real geometry.
-    const clusters = finalClusterCounts(result.stdout.toString())
+    const clusters = finalClusterCounts(stdout)
     expect(clusters).not.toBeNull()
     expect(clusters!.meshes).toBeGreaterThan(0)
     expect(clusters!.triangles).toBeGreaterThan(0)
+
+    // A missing/misnamed asset (e.g. a skyname CS2 doesn't ship) fails to
+    // load at runtime while the compiler still exits 0 and writes a vpk.
+    expect(unexpectedResourceFailures(stdout)).toEqual([])
   } finally {
     // Runs even when an assertion throws — this test is meant to be run when
     // something is broken, so the failure path must not litter the CS2 install.
@@ -82,7 +106,13 @@ test.if(enabled)('a generated vmap compiles to a vpk', async () => {
 const ADDON_LAYOUT = 'cs2ts_it_layout'
 
 test.if(enabled)('a built layout compiles to a vpk with real geometry', async () => {
-  const text = buildVmap(example())
+  const map = example()
+  const text = buildVmap(map)
+  // A safe floor, not an exact count: every box contributes 12 triangles and
+  // every wedge 8, so this collapses hard on a broken mesh (e.g. a bad
+  // half-edge twin) while still tolerating compiler-side aggregation —
+  // unlike a bare `> 0`, which a mesh that lost 32 of 33 solids still clears.
+  const expectedSolids = toSolids(solve(map.graph)).length
 
   await $`mkdir -p ${`${CS2}/content/csgo_addons/${ADDON_LAYOUT}/maps`}`
   await $`mkdir -p ${`${CS2}/game/csgo_addons/${ADDON_LAYOUT}`}`
@@ -100,12 +130,20 @@ test.if(enabled)('a built layout compiles to a vpk with real geometry', async ()
     expect(await Bun.file(`${CS2}/game/csgo_addons/${ADDON_LAYOUT}/maps/layout.vpk`).exists())
       .toBe(true)
 
-    // Same non-empty-world assertion as above: exit 0 and a written vpk are
-    // not proof that the generated layout's geometry survived the compile.
-    const clusters = finalClusterCounts(result.stdout.toString())
+    const stdout = result.stdout.toString()
+
+    // Same non-empty-world reasoning as above, but a bare `> 0` is too weak
+    // once the map has real content: a broken mesh that drops 32 of 33
+    // solids still clears `> 0`. Assert against what the SDK actually
+    // produced instead.
+    const clusters = finalClusterCounts(stdout)
     expect(clusters).not.toBeNull()
-    expect(clusters!.meshes).toBeGreaterThan(0)
-    expect(clusters!.triangles).toBeGreaterThan(0)
+    expect(clusters!.meshes).toBeGreaterThanOrEqual(expectedSolids)
+    expect(clusters!.triangles).toBeGreaterThanOrEqual(expectedSolids * 6)
+
+    // A missing/misnamed asset (e.g. a skyname CS2 doesn't ship) fails to
+    // load at runtime while the compiler still exits 0 and writes a vpk.
+    expect(unexpectedResourceFailures(stdout)).toEqual([])
   } finally {
     await $`rm -rf ${`${CS2}/content/csgo_addons/${ADDON_LAYOUT}`} ${`${CS2}/game/csgo_addons/${ADDON_LAYOUT}`}`
   }
