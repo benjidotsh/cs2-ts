@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { compilerArgs } from '../src/compile'
+import { compilerArgs, launchMap } from '../src/compile'
 
 const install = {
   root: '/mnt/c/cs2', rootWin: 'C:\\cs2',
@@ -21,6 +21,16 @@ test('production bakes lighting at Hammer defaults', () => {
   expect(args).toContain('-bakelighting')
   expect(args.join(' ')).toContain('-lightmapMaxResolution 1024')
   expect(args.join(' ')).toContain('-lightmapVRadQuality 1')
+})
+
+test('a failed launch reports the compile survived, and keeps the cause', async () => {
+  const broken = { ...install, binDir: '/tmp', cs2Exe: '/tmp/cs2-does-not-exist.exe' }
+  const error = await launchMap(broken, 'my_addon', 'de_test')
+    .then(() => undefined, (e: unknown) => e as Error)
+
+  expect(error).toBeDefined()
+  expect(error!.message).toContain('the map compiled')
+  expect((error as Error & { cause?: unknown }).cause).toBeDefined()
 })
 
 test('lighting settings are overridable', () => {

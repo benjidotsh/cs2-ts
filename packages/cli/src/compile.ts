@@ -53,6 +53,17 @@ export async function launchMap(
   addon: string,
   mapName: string,
 ): Promise<void> {
-  await run(install.cs2Exe, ['-addon', addon, '-insecure', '+map', mapName],
-    install.binDir)
+  try {
+    await run(install.cs2Exe, ['-addon', addon, '-insecure', '+map', mapName],
+      install.binDir)
+  } catch (cause) {
+    // A refusal to start arrives as a plain nonzero exit, so this can only
+    // suggest. FACEIT AC is named because it's the one confirmed to do it.
+    throw new Error(
+      `the map compiled, but CS2 would not start (${install.cs2Exe}).\n` +
+      'A running anti-cheat can refuse this — FACEIT AC blocks any process named ' +
+      'cs2.exe while its service runs. Close it and retry.',
+      { cause },
+    )
+  }
 }
