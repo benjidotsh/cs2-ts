@@ -116,6 +116,28 @@ test('a rise with no run is rejected', () => {
   }
 })
 
+test('a placement rise steeper than its run is a rise conflict', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 256, rise: 300 })
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    expect((e as SolverError).code).toBe('RISE_CONFLICT')
+  }
+})
+
+test('a placement rise exactly equal to its run (1:1) is accepted', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 256, rise: 256 })
+  expect(() => solve(map.graph)).not.toThrow()
+})
+
 test('a corridor driving through a third room is an overlap', () => {
   // aSite east of mid, bSite west of mid: the only straight corridor between
   // them runs through mid. This is the mistake the spec's own first draft made.

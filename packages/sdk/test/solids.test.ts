@@ -162,19 +162,25 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
   const heights = [0, 64, 128, 192]
   const rises = [0, 32, 96]
   const lengths = [0, 256]
+  const transitions = [Transition.Step, Transition.Ramp, Transition.Stairs]
 
   for (const size of sizes) {
     for (const width of widths) {
       for (const height of heights) {
         for (const rise of rises) {
           for (const length of lengths) {
-            const map = new CS2Map('t')
-            const a = map.room({ name: 'a', size })
-            a.room({ name: 'b', size }, {
-              direction: Direction.North, width, length, height, rise,
-              via: Transition.Step,
-            })
-            checkAll(map)
+            for (const via of transitions) {
+              // A non-zero rise with zero length and a non-Step transition
+              // has no room for a ramp or stairs and is rejected by the
+              // solver (SLOPE_WITHOUT_RUN) — not a positive-volume concern.
+              if (rise !== 0 && length === 0 && via !== Transition.Step) continue
+              const map = new CS2Map('t')
+              const a = map.room({ name: 'a', size })
+              a.room({ name: 'b', size }, {
+                direction: Direction.North, width, length, height, rise, via,
+              })
+              checkAll(map)
+            }
           }
         }
       }

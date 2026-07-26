@@ -149,9 +149,17 @@ function corridorSolids(passage: Passage, fromAtMinEnd: boolean): Solid[] {
     for (let i = 0; i < steps; i++) {
       const min: Vec3 = [0, 0, lowZ - SLAB_THICKNESS]
       const max: Vec3 = [0, 0, Math.min(lowZ + (i + 1) * RISER, highZ)]
-      const near = risesTowardMax ? axisMin + i * tread : axisMax - (i + 1) * tread
-      min[axis] = near
-      max[axis] = near + tread
+      // Both edges are computed from the same fixed anchor (axisMin or
+      // axisMax) rather than one from the other, so adjacent treads land on
+      // the exact same floating-point value at their shared boundary instead
+      // of drifting by a few ULPs and leaving a sliver overlap or gap.
+      if (risesTowardMax) {
+        min[axis] = axisMin + i * tread
+        max[axis] = axisMin + (i + 1) * tread
+      } else {
+        min[axis] = axisMax - (i + 1) * tread
+        max[axis] = axisMax - i * tread
+      }
       min[other] = bounds.min[other]!
       max[other] = bounds.max[other]!
       out.push(box(min, max, MATERIALS.floor))

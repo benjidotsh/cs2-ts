@@ -122,6 +122,15 @@ export function solve(graph: MapGraph): Layout {
       )
     }
 
+    if (c.rise !== 0 && c.via !== Transition.Step && Math.abs(c.rise) > c.length) {
+      throw new SolverError(
+        'RISE_CONFLICT',
+        `connection from "${parent.name}" to "${child.name}" rises ${Math.abs(c.rise)} ` +
+        `units over ${c.length} units of run, steeper than 1:1`,
+        { parent: parent.name, child: child.name, rise: c.rise, run: c.length },
+      )
+    }
+
     const floorZ = parent.floorZ + c.rise
 
     // Position along the travel axis: parent's face, plus the corridor.
