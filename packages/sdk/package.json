@@ -3,11 +3,6 @@
   "version": "0.1.0",
   "description": "TypeScript SDK for describing Counter-Strike 2 map layouts as code and compiling them to Source 2 .vmap files",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "git+https://github.com/cs2-ts/cs2-ts.git",
-    "directory": "packages/sdk"
-  },
   "type": "module",
   "exports": { ".": "./src/index.ts" }
 }

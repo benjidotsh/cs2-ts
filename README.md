@@ -220,8 +220,11 @@ A few narrower constraints are worth knowing before you hit them:
 
 ## Credit
 
-cs2.ts's handling of the `CDmePolygonMesh` format — and the half-edge mesh-building
-algorithm behind `buildMesh` (`packages/sdk/src/vmap/mesh.ts`) that turns a room's
-brush geometry into one — is ported from
-[ValveResourceFormat](https://github.com/ValveResourceFormat/ValveResourceFormat),
-used under its MIT license.
+This project is built on reverse-engineering work by
+[ValveResourceFormat](https://github.com/ValveResourceFormat/ValveResourceFormat)
+(MIT licensed). The `CDmePolygonMesh` format — Source 2's half-edge mesh
+representation — was understood from their implementation, and the incremental
+half-edge construction in `packages/sdk/src/vmap/mesh.ts` is a TypeScript port of the
+algorithm in their
+[`ValveResourceFormat/IO/HammerMeshBuilder.cs`](https://github.com/ValveResourceFormat/ValveResourceFormat/blob/master/ValveResourceFormat/IO/HammerMeshBuilder.cs),
+specifically its `HammerMeshBuilder.GenerateMesh()`.
