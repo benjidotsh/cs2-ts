@@ -21,24 +21,49 @@ test('anchor plus children builds a placement tree', () => {
 test('a second anchor is rejected', () => {
   const map = new CS2Map('de_test')
   map.room({ name: 'a', size: [512, 512, 192] })
-  expect(() => map.room({ name: 'b', size: [512, 512, 192] }))
-    .toThrow(AuthoringError)
+  try {
+    map.room({ name: 'b', size: [512, 512, 192] })
+    throw new Error('expected map.room to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(AuthoringError)
+    expect((e as AuthoringError).code).toBe('DUPLICATE_ANCHOR')
+  }
 })
 
 test('duplicate room names are rejected', () => {
   const map = new CS2Map('de_test')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
-  expect(() => a.room({ name: 'a', size: [256, 256, 192] },
-    { direction: Direction.North, width: 128, length: 0 })).toThrow(AuthoringError)
+  try {
+    a.room({ name: 'a', size: [256, 256, 192] },
+      { direction: Direction.North, width: 128, length: 0 })
+    throw new Error('expected a.room to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(AuthoringError)
+    expect((e as AuthoringError).code).toBe('DUPLICATE_ROOM_NAME')
+  }
 })
 
 test('diagonal directions are rejected at runtime as well as by types', () => {
   const map = new CS2Map('de_test')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
+  try {
+    a.room({ name: 'b', size: [256, 256, 192] },
+      // deliberately bypassing the Cardinal type to prove the guard exists
+      { direction: Direction.NorthEast as never, width: 128, length: 0 })
+    throw new Error('expected a.room to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(AuthoringError)
+    expect((e as AuthoringError).code).toBe('DIAGONAL_CONNECTION')
+  }
+})
+
+test('a rejected diagonal leaves no partial room in the graph', () => {
+  const map = new CS2Map('de_test')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
   expect(() => a.room({ name: 'b', size: [256, 256, 192] },
-    // deliberately bypassing the Cardinal type to prove the guard exists
-    { direction: Direction.NorthEast as never, width: 128, length: 0 }))
-    .toThrow(AuthoringError)
+    { direction: Direction.NorthEast as never, width: 128, length: 0 })).toThrow()
+  expect(map.graph.rooms).toHaveLength(1)
+  expect(map.graph.placements).toHaveLength(0)
 })
 
 test('cross connections are recorded separately from placements', () => {

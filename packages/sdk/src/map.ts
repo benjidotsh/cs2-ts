@@ -94,7 +94,7 @@ export interface BombsiteOptions extends Placement {
   size?: Vec3
 }
 
-export class Room {
+class Room {
   constructor(
     readonly id: number,
     readonly node: RoomNode,
@@ -211,3 +211,5 @@ export class CS2Map {
     return new Room(node.id, node, this)
   }
 }
+
+export type { Room }
