@@ -25,22 +25,34 @@ const exists = (p: string) => access(p).then(() => true, () => false)
 
 function describe(root: string): Cs2Install {
   const binDir = join(root, 'game', 'bin', 'win64')
-  return {
-    root,
-    rootWin: toWindowsPath(root),
-    gameCsgo: join(root, 'game', 'csgo'),
-    gameCsgoWin: toWindowsPath(join(root, 'game', 'csgo')),
-    binDir,
-    resourceCompiler: join(binDir, 'resourcecompiler.exe'),
-    cs2Exe: join(binDir, 'cs2.exe'),
+  try {
+    return {
+      root,
+      rootWin: toWindowsPath(root),
+      gameCsgo: join(root, 'game', 'csgo'),
+      gameCsgoWin: toWindowsPath(join(root, 'game', 'csgo')),
+      binDir,
+      resourceCompiler: join(binDir, 'resourcecompiler.exe'),
+      cs2Exe: join(binDir, 'cs2.exe'),
+    }
+  } catch (cause) {
+    throw new PreflightError(
+      `CS2 directory "${root}" is not reachable from Windows. The CS2 tools are ` +
+      'Windows executables, so the install must live under /mnt/<drive> — a path ' +
+      'inside the WSL filesystem will not work.',
+    )
   }
 }
 
 async function steamLibraryRoots(): Promise<string[]> {
-  const candidates = [
-    '/mnt/c/Program Files (x86)/Steam/steamapps/libraryfolders.vdf',
-    '/mnt/d/SteamLibrary/steamapps/libraryfolders.vdf',
-  ]
+  const candidates: string[] = []
+  for (const drive of 'cdefghijklmnopqrstuvwxyz') {
+    candidates.push(
+      `/mnt/${drive}/Program Files (x86)/Steam/steamapps/libraryfolders.vdf`,
+      `/mnt/${drive}/Steam/steamapps/libraryfolders.vdf`,
+      `/mnt/${drive}/SteamLibrary/steamapps/libraryfolders.vdf`,
+    )
+  }
   const roots: string[] = []
   for (const vdf of candidates) {
     if (!(await exists(vdf))) continue

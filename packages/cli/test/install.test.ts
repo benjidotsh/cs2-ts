@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
-import { PreflightError, preflight } from '../src/install'
+import { PreflightError, findCs2Install, preflight } from '../src/install'
 
 async function fakeInstall(withTools: boolean) {
   const root = await mkdtemp(join(tmpdir(), 'cs2ts-'))
@@ -37,4 +37,14 @@ test('preflight names the missing tool', async () => {
 test('preflight checks the addon exists when one is named', async () => {
   const install = await fakeInstall(true)
   await expect(preflight(install, 'nope')).rejects.toThrow(/cs2ts init nope/)
+})
+
+test('findCs2Install wraps an override outside /mnt as a PreflightError', async () => {
+  // A real directory that exists but lives on the native WSL filesystem, not
+  // under /mnt/<drive> — the classic "forgot the /mnt prefix" typo. This must
+  // fail as PreflightError (not a bare Error from toWindowsPath) so the CLI
+  // can catch one error type and print a clean message.
+  const nativeDir = await mkdtemp(join(tmpdir(), 'cs2ts-native-'))
+  await expect(findCs2Install(nativeDir)).rejects.toThrow(PreflightError)
+  await expect(findCs2Install(nativeDir)).rejects.toThrow(/not reachable from Windows/)
 })

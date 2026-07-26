@@ -14,3 +14,17 @@ test('leaves already-Windows paths alone', () => {
 test('rejects paths that cannot be reached from Windows', () => {
   expect(() => toWindowsPath('/home/user/maps')).toThrow(/not reachable from Windows/)
 })
+
+test('accepts an uppercase drive letter in the /mnt/<drive> segment', () => {
+  expect(toWindowsPath('/mnt/C/Games')).toBe('C:\\Games')
+})
+
+test('preserves a trailing slash', () => {
+  expect(toWindowsPath('/mnt/c/Games/')).toBe('C:\\Games\\')
+})
+
+test('translates a bare /mnt/<drive> with no path segment to a bare drive letter', () => {
+  // Unreachable for a real install (there is no CS2 directly at the drive root),
+  // but this documents the current, intentional behavior.
+  expect(toWindowsPath('/mnt/c')).toBe('C:')
+})
