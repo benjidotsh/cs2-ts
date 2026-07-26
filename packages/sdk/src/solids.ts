@@ -1,6 +1,9 @@
 import { MATERIALS, SLAB_THICKNESS, WALL_THICKNESS } from './defaults'
 import type { Layout, Passage, PlacedRoom } from './solve'
-import type { BoxSolid, Solid, Vec3 } from './types'
+import {
+  Direction, Transition,
+  type BoxSolid, type Cardinal, type Solid, type Vec3, type WedgeSolid,
+} from './types'
 
 export interface Interval { lo: number; hi: number }
 
@@ -55,7 +58,13 @@ export function toSolids(layout: Layout): Solid[] {
     addOpening(to.id, sideFacing(to, passage), { lo, hi, top })
 
     if (passage.bounds.max[passage.axis]! > passage.bounds.min[passage.axis]!) {
-      solids.push(...corridorSolids(passage))
+      // Which physical end (bounds.min or bounds.max along the travel axis)
+      // "from" occupies isn't recorded on Passage — direction/sign live on
+      // the connection, not here — so it's derived the same way sideFacing()
+      // derives it below, and passed down since corridorSolids only sees the
+      // passage.
+      const fromAtMinEnd = passage.bounds.min[passage.axis]! >= from.bounds.max[passage.axis]!
+      solids.push(...corridorSolids(passage, fromAtMinEnd))
     }
   }
 
@@ -79,29 +88,86 @@ export function toSolids(layout: Layout): Solid[] {
   }
 }
 
-function corridorSolids(passage: Passage): Solid[] {
+/**
+ * `fromAtMinEnd` says whether `passage.from` sits at `bounds.min[axis]` (vs.
+ * `bounds.max[axis]`) — needed to tell which physical end a rise climbs
+ * toward, since that depends on the connection's direction/sign, not just on
+ * whether `toZ` is numerically greater than `fromZ`.
+ */
+function corridorSolids(passage: Passage, fromAtMinEnd: boolean): Solid[] {
   const { bounds, axis } = passage
   const other: 0 | 1 = axis === 0 ? 1 : 0
   const out: Solid[] = []
 
-  const floorTop = Math.min(passage.fromZ, passage.toZ)
-  const floorMin: Vec3 = [0, 0, floorTop - SLAB_THICKNESS]
-  const floorMax: Vec3 = [0, 0, floorTop]
-  for (const i of [0, 1] as const) {
-    floorMin[i] = bounds.min[i]!
-    floorMax[i] = bounds.max[i]!
-  }
-  out.push(box(floorMin, floorMax, MATERIALS.floor))
+  const lowZ = Math.min(passage.fromZ, passage.toZ)
+  const highZ = Math.max(passage.fromZ, passage.toZ)
+  const risesTowardMax = fromAtMinEnd === (passage.toZ > passage.fromZ)
+  const axisMin = bounds.min[axis]!
+  const axisMax = bounds.max[axis]!
 
-  // A corridor whose computed ceiling doesn't clear its own floor has no
-  // meaningful side walls or ceiling to build; the floor slab still marks it.
-  if (bounds.max[2]! > floorTop) {
+  if (highZ === lowZ || passage.via === Transition.Step) {
+    // Level corridors, and Transition.Step regardless of rise, are a flat
+    // slab at the lower end — Step is a deliberate ledge, not a slope.
+    const floorMin: Vec3 = [0, 0, lowZ - SLAB_THICKNESS]
+    const floorMax: Vec3 = [0, 0, lowZ]
+    for (const i of [0, 1] as const) {
+      floorMin[i] = bounds.min[i]!
+      floorMax[i] = bounds.max[i]!
+    }
+    out.push(box(floorMin, floorMax, MATERIALS.floor))
+  } else if (passage.via === Transition.Ramp) {
+    // A support slab under the low end, then the wedge itself.
+    const baseMin: Vec3 = [0, 0, lowZ - SLAB_THICKNESS]
+    const baseMax: Vec3 = [0, 0, lowZ]
+    for (const i of [0, 1] as const) {
+      baseMin[i] = bounds.min[i]!
+      baseMax[i] = bounds.max[i]!
+    }
+    out.push(box(baseMin, baseMax, MATERIALS.floor))
+
+    const rise: Cardinal = axis === 0
+      ? (risesTowardMax ? Direction.East : Direction.West)
+      : (risesTowardMax ? Direction.North : Direction.South)
+
+    const wedgeMin: Vec3 = [0, 0, lowZ]
+    const wedgeMax: Vec3 = [0, 0, highZ]
+    for (const i of [0, 1] as const) {
+      wedgeMin[i] = bounds.min[i]!
+      wedgeMax[i] = bounds.max[i]!
+    }
+    const wedge: WedgeSolid = {
+      kind: 'wedge', min: wedgeMin, max: wedgeMax, rise, material: MATERIALS.floor,
+    }
+    out.push(wedge)
+  } else {
+    // Stairs: 8-unit risers, tread depth divided evenly across the run. The
+    // last riser is capped to `highZ` so a rise that isn't a multiple of 8
+    // lands exactly on the upper floor instead of overshooting past it.
+    const RISER = 8
+    const steps = Math.ceil((highZ - lowZ) / RISER)
+    const tread = (axisMax - axisMin) / steps
+    for (let i = 0; i < steps; i++) {
+      const min: Vec3 = [0, 0, lowZ - SLAB_THICKNESS]
+      const max: Vec3 = [0, 0, Math.min(lowZ + (i + 1) * RISER, highZ)]
+      const near = risesTowardMax ? axisMin + i * tread : axisMax - (i + 1) * tread
+      min[axis] = near
+      max[axis] = near + tread
+      min[other] = bounds.min[other]!
+      max[other] = bounds.max[other]!
+      out.push(box(min, max, MATERIALS.floor))
+    }
+  }
+
+  // A corridor whose computed ceiling doesn't clear the lower end has no
+  // meaningful side walls or ceiling to build; the floor geometry above
+  // still marks it.
+  if (bounds.max[2]! > lowZ) {
     // Side walls run the length of the corridor, outside its width, inset by
     // a wall's thickness at each end so they sit between the two rooms' own
     // walls rather than inside them. A corridor exactly `2 * WALL_THICKNESS`
     // long needs none — the two rooms' walls already meet with no gap.
     for (const side of [-1, 1] as const) {
-      const min: Vec3 = [0, 0, floorTop]
+      const min: Vec3 = [0, 0, lowZ]
       const max: Vec3 = [0, 0, bounds.max[2]!]
       min[axis] = bounds.min[axis]! + WALL_THICKNESS
       max[axis] = bounds.max[axis]! - WALL_THICKNESS
