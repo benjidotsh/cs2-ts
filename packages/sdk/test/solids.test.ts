@@ -13,6 +13,18 @@ function insideAny(solids: Solid[], p: readonly [number, number, number]): boole
     p[2] > s.min[2]! && p[2] < s.max[2]!)
 }
 
+/** Volume of the intersection of two boxes, 0 if they do not overlap. */
+function overlapVolume(a: Solid, b: Solid): number {
+  let v = 1
+  for (let i = 0; i < 3; i++) {
+    const lo = Math.max(a.min[i]!, b.min[i]!)
+    const hi = Math.min(a.max[i]!, b.max[i]!)
+    if (hi <= lo) return 0
+    v *= hi - lo
+  }
+  return v
+}
+
 test('interval subtraction handles the interesting cases', () => {
   const span = { lo: 0, hi: 1024 }
   expect(subtractIntervals(span, [])).toEqual([{ lo: 0, hi: 1024 }])
@@ -169,3 +181,24 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
     }
   }
 })
+
+test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+  'solids never overlap each other, flush or corridor, facing %i',
+  (direction) => {
+    for (const length of [0, 32, 256]) {
+      const map = new CS2Map('t')
+      const a = map.room({ name: 'a', size: [512, 512, 192] })
+      a.room({ name: 'b', size: [512, 512, 192] },
+        { direction, width: 128, length })
+      const solids = toSolids(solve(map.graph))
+
+      let total = 0
+      for (let i = 0; i < solids.length; i++) {
+        for (let j = i + 1; j < solids.length; j++) {
+          total += overlapVolume(solids[i]!, solids[j]!)
+        }
+      }
+      expect(total).toBe(0)
+    }
+  },
+)

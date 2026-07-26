@@ -152,11 +152,11 @@ function roomSolids(room: PlacedRoom, openings: Map<string, Opening[]>): Solid[]
 
   for (const { side, axis, at, outward } of sides) {
     const other: 0 | 1 = axis === 0 ? 1 : 0
-    // The X-axis walls (running north-south) are widened to cover the corner
-    // columns the Y-axis walls leave void; widening both pairs would double
-    // that corner volume instead of filling it.
-    const pad = axis === 0 ? WALL_THICKNESS : 0
-    const span: Interval = { lo: bounds.min[other]! - pad, hi: bounds.max[other]! + pad }
+    // Deliberately unpadded. Padding to fill the 16x16 corner columns works for
+    // an isolated room but reaches into a flush neighbour's wall footprint,
+    // producing overlapping brushes. The columns are sealed along the shared
+    // vertical edge — unreachable and invisible — so they are left as they are.
+    const span: Interval = { lo: bounds.min[other]!, hi: bounds.max[other]! }
     const holes = openings.get(`${room.id}:${side}`) ?? []
 
     const wallMinAxis = outward === -1 ? at - WALL_THICKNESS : at
