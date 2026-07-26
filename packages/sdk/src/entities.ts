@@ -71,9 +71,14 @@ export function resolvePlacement(
   const at = placement.at ?? [0, 0, 0]
   origin = [origin[0] + at[0], origin[1] + at[1], origin[2] + at[2]]
 
-  // Direction members are 0-7, so anything larger is a literal yaw in degrees.
+  // Direction members are the integers 0-7; anything else (including negative
+  // numbers, fractions, or values above 7) is a literal yaw in degrees.
   const facing = placement.facing
-  const yaw = facing === undefined ? 0 : facing > 7 ? facing : directionYaw(facing as Direction)
+  const yaw = facing === undefined
+    ? 0
+    : Number.isInteger(facing) && facing >= 0 && facing <= 7
+      ? directionYaw(facing as Direction)
+      : facing
 
   return { origin, yaw }
 }
@@ -102,24 +107,43 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
   }
 
   for (const req of node.spawns) {
-    const cols = Math.ceil(Math.sqrt(req.count))
-    const rows = Math.ceil(req.count / cols)
-    const gridW = (cols - 1) * req.spacing
-    const gridH = (rows - 1) * req.spacing
-    const interiorW = room.bounds.max[0]! - room.bounds.min[0]!
-    const interiorH = room.bounds.max[1]! - room.bounds.min[1]!
-
-    if (gridW > interiorW || gridH > interiorH) {
+    if (req.count <= 0) {
       throw new AuthoringError(
         'SPAWN_GRID_TOO_LARGE',
-        `${req.count} spawns at ${req.spacing}u spacing need ` +
-        `${gridW}x${gridH} units but room "${room.name}" is only ` +
-        `${interiorW}x${interiorH}`,
+        `room "${room.name}" requested ${req.count} spawns; count must be positive`,
         { room: room.name, count: req.count, spacing: req.spacing },
       )
     }
 
+    const cols = Math.ceil(Math.sqrt(req.count))
+    const rows = Math.ceil(req.count / cols)
+    const gridW = (cols - 1) * req.spacing
+    const gridH = (rows - 1) * req.spacing
+
+    // The grid is centred on the resolved anchor, which may itself sit at an
+    // edge or corner of the room (e.g. Align.Bottom) — so the fit check must
+    // compare the grid's actual world extents against the room's bounds, not
+    // just the grid's size against the room's overall size.
     const { origin, yaw } = resolvePlacement(room, req.placement)
+    const gridMinX = origin[0] - gridW / 2
+    const gridMaxX = origin[0] + gridW / 2
+    const gridMinY = origin[1] - gridH / 2
+    const gridMaxY = origin[1] + gridH / 2
+
+    if (
+      gridMinX < room.bounds.min[0]! || gridMaxX > room.bounds.max[0]! ||
+      gridMinY < room.bounds.min[1]! || gridMaxY > room.bounds.max[1]!
+    ) {
+      throw new AuthoringError(
+        'SPAWN_GRID_TOO_LARGE',
+        `${req.count} spawns at ${req.spacing}u spacing in room "${room.name}" ` +
+        `span x:[${gridMinX},${gridMaxX}] y:[${gridMinY},${gridMaxY}], which ` +
+        `falls outside the room's bounds x:[${room.bounds.min[0]},${room.bounds.max[0]}] ` +
+        `y:[${room.bounds.min[1]},${room.bounds.max[1]}]`,
+        { room: room.name, count: req.count, spacing: req.spacing },
+      )
+    }
+
     for (let i = 0; i < req.count; i++) {
       const col = i % cols
       const row = Math.floor(i / cols)
