@@ -1,6 +1,13 @@
 {
   "name": "@cs2-ts/cli",
   "version": "0.1.0",
+  "description": "cs2ts: build Counter-Strike 2 maps written with @cs2-ts/sdk into playable .vpk files",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/cs2-ts/cs2-ts.git",
+    "directory": "packages/cli"
+  },
   "type": "module",
   "bin": { "cs2ts": "./src/index.ts" },
   "dependencies": {
