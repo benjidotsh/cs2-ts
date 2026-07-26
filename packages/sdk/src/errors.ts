@@ -4,12 +4,14 @@ export type SolverErrorCode =
   | 'SLOPE_WITHOUT_RUN'
   | 'RISE_CONFLICT'
   | 'UNROUTABLE_CONNECTION'
+  | 'CORRIDOR_TOO_SHORT'
 
 export type AuthoringErrorCode =
   | 'DUPLICATE_ANCHOR'
   | 'DUPLICATE_ROOM_NAME'
   | 'DIAGONAL_CONNECTION'
   | 'SPAWN_GRID_TOO_LARGE'
+  | 'NEGATIVE_HEIGHT'
 
 export class Cs2tsError extends Error {
   constructor(

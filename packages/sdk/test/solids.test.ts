@@ -2,7 +2,16 @@ import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { subtractIntervals, toSolids } from '../src/solids'
-import { Direction } from '../src/types'
+import { Direction, Transition } from '../src/types'
+import type { Solid } from '../src/types'
+
+/** True if point `p` lies strictly inside any of the given axis-aligned solids. */
+function insideAny(solids: Solid[], p: readonly [number, number, number]): boolean {
+  return solids.some((s) =>
+    p[0] > s.min[0]! && p[0] < s.max[0]! &&
+    p[1] > s.min[1]! && p[1] < s.max[1]! &&
+    p[2] > s.min[2]! && p[2] < s.max[2]!)
+}
 
 test('interval subtraction handles the interesting cases', () => {
   const span = { lo: 0, hi: 1024 }
@@ -36,6 +45,17 @@ test('a lone room becomes a sealed shell', () => {
   const floor = solids[0]!
   expect(floor.min[2]).toBe(-16)
   expect(floor.max[2]).toBe(0)
+
+  // A solid *count* can't distinguish a correctly-sealed room from one whose
+  // walls, floor or ceiling ended up in the wrong place. Probe just past each
+  // of the room's six interior faces: every probe must land inside some
+  // emitted solid.
+  const probes: Array<[number, number, number]> = [
+    [-256.5, 0, 96], [256.5, 0, 96],
+    [0, -256.5, 96], [0, 256.5, 96],
+    [0, 0, -0.5], [0, 0, 192.5],
+  ]
+  for (const p of probes) expect(insideAny(solids, p)).toBe(true)
 })
 
 test('a full-height doorway splits one wall into two boxes', () => {
@@ -51,6 +71,21 @@ test('a full-height doorway splits one wall into two boxes', () => {
   expect(northWallPieces).toHaveLength(2)
   expect(northWallPieces.map((s) => [s.min[0], s.max[0]]).sort((p, q) => p[0]! - q[0]!))
     .toEqual([[-512, -64], [64, 512]])
+
+  // b's near (south) wall carries the same split: the destination room's
+  // side of the doorway, not just the origin room's.
+  const bNearWallPieces = solids.filter(
+    (s) => s.min[1]! >= 240 && s.max[1]! <= 256 && s.max[2]! === 192)
+  expect(bNearWallPieces).toHaveLength(2)
+  expect(bNearWallPieces.map((s) => [s.min[0], s.max[0]]).sort((p, q) => p[0]! - q[0]!))
+    .toEqual([[-512, -64], [64, 512]])
+
+  // b's far (north) wall, opposite the doorway, stays a single unbroken
+  // piece - exactly where an inverted sideFacing would put the hole instead.
+  const bFarWallPieces = solids.filter(
+    (s) => s.min[1]! >= 768 && s.max[1]! <= 784 && s.max[2]! === 192)
+  expect(bFarWallPieces).toHaveLength(1)
+  expect([bFarWallPieces[0]!.min[0], bFarWallPieces[0]!.max[0]]).toEqual([-512, 512])
 })
 
 test('a partial-height opening adds a lintel', () => {
@@ -65,14 +100,72 @@ test('a partial-height opening adds a lintel', () => {
   expect(lintel).toBeDefined()
 })
 
-test('every emitted solid has positive volume', () => {
+test('a straight line reaches the connected room through its doorway, but not past the far wall', () => {
   const map = new CS2Map('t')
-  const a = map.room({ name: 'a', size: [1024, 768, 192] })
-  a.room({ name: 'b', size: [512, 512, 192] },
-    { direction: Direction.North, width: 192, length: 256 })
-  for (const s of toSolids(solve(map.graph))) {
-    expect(s.max[0]! - s.min[0]!).toBeGreaterThan(0)
-    expect(s.max[1]! - s.min[1]!).toBeGreaterThan(0)
-    expect(s.max[2]! - s.min[2]!).toBeGreaterThan(0)
+  const a = map.room({ name: 'a', size: [1024, 512, 192] })
+  a.room({ name: 'b', size: [1024, 512, 192] },
+    { direction: Direction.North, width: 128, length: 0, height: 192 })
+  const solids = toSolids(solve(map.graph))
+
+  // March along x=0, z=96 (mid-height) and report the first y at which the
+  // point lands inside a solid, or null if the whole run is clear.
+  const firstHit = (fromY: number, toY: number): number | null => {
+    const steps = 400
+    for (let i = 0; i <= steps; i++) {
+      const y = fromY + (toY - fromY) * (i / steps)
+      if (insideAny(solids, [0, y, 96])) return y
+    }
+    return null
+  }
+
+  // a's centre (y=0) to b's centre (y=512): straight through the doorway.
+  expect(firstHit(0, 512)).toBeNull()
+
+  // From b's centre, heading further north past its far, unbroken wall.
+  expect(firstHit(512, 900)).not.toBeNull()
+})
+
+test('every emitted solid has positive volume across a sweep of shapes, openings and rises', () => {
+  const checkAll = (map: CS2Map) => {
+    for (const s of toSolids(solve(map.graph))) {
+      expect(s.max[0]! - s.min[0]!).toBeGreaterThan(0)
+      expect(s.max[1]! - s.min[1]!).toBeGreaterThan(0)
+      expect(s.max[2]! - s.min[2]!).toBeGreaterThan(0)
+    }
+  }
+
+  // The original asymmetric case: differently-sized rooms, a corridor.
+  {
+    const map = new CS2Map('t')
+    const a = map.room({ name: 'a', size: [1024, 768, 192] })
+    a.room({ name: 'b', size: [512, 512, 192] },
+      { direction: Direction.North, width: 192, length: 256 })
+    checkAll(map)
+  }
+
+  const sizes: Array<[number, number, number]> = [
+    [1024, 768, 192], [512, 512, 192], [768, 640, 256],
+  ]
+  const widths = [64, 128, 192]
+  const heights = [0, 64, 128, 192]
+  const rises = [0, 32, 96]
+  const lengths = [0, 256]
+
+  for (const size of sizes) {
+    for (const width of widths) {
+      for (const height of heights) {
+        for (const rise of rises) {
+          for (const length of lengths) {
+            const map = new CS2Map('t')
+            const a = map.room({ name: 'a', size })
+            a.room({ name: 'b', size }, {
+              direction: Direction.North, width, length, height, rise,
+              via: Transition.Step,
+            })
+            checkAll(map)
+          }
+        }
+      }
+    }
   }
 })

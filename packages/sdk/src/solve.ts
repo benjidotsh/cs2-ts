@@ -1,3 +1,4 @@
+import { WALL_THICKNESS } from './defaults'
 import { SolverError } from './errors'
 import type { CrossEdge, MapGraph, PlacementEdge, RoomNode } from './map'
 import {
@@ -101,6 +102,16 @@ export function solve(graph: MapGraph): Layout {
       )
     }
 
+    if (c.length > 0 && c.length < 2 * WALL_THICKNESS) {
+      throw new SolverError(
+        'CORRIDOR_TOO_SHORT',
+        `connection from "${parent.name}" to "${child.name}" has length ${c.length}, ` +
+        `shorter than twice the wall thickness (${2 * WALL_THICKNESS}); a corridor ` +
+        'that short cannot fit the walls of both rooms it joins',
+        { parent: parent.name, child: child.name, length: c.length },
+      )
+    }
+
     if (c.rise !== 0 && c.length === 0 && c.via !== Transition.Step) {
       throw new SolverError(
         'SLOPE_WITHOUT_RUN',
@@ -148,12 +159,17 @@ export function solve(graph: MapGraph): Layout {
       )
     }
 
+    // A corridor never rises above the lower of the two rooms' own ceilings,
+    // even when an explicit height would otherwise push it higher.
+    const roomsCeiling = Math.min(parent.bounds.max[2]!, floorZ + child.size[2]!)
+    const passageCeiling = c.height != null
+      ? Math.min(Math.max(parent.floorZ, floorZ) + c.height, roomsCeiling)
+      : roomsCeiling
+
     if (c.length > 0) {
       const centre = (span.lo + span.hi) / 2
       const pMin: Vec3 = [0, 0, floorZ]
-      const pMax: Vec3 = [0, 0, c.height != null
-        ? Math.max(parent.floorZ, floorZ) + c.height
-        : Math.min(parent.bounds.max[2]!, floorZ + child.size[2]!)]
+      const pMax: Vec3 = [0, 0, passageCeiling]
       pMin[axis] = Math.min(parentFace, nearFace)
       pMax[axis] = Math.max(parentFace, nearFace)
       pMin[other] = centre - c.width / 2
@@ -170,9 +186,7 @@ export function solve(graph: MapGraph): Layout {
       // Flush rooms: a zero-thickness passage marks where to cut the openings.
       const centre = (span.lo + span.hi) / 2
       const pMin: Vec3 = [0, 0, Math.min(parent.floorZ, floorZ)]
-      const pMax: Vec3 = [0, 0, c.height != null
-        ? Math.max(parent.floorZ, floorZ) + c.height
-        : Math.min(parent.bounds.max[2]!, floorZ + child.size[2]!)]
+      const pMax: Vec3 = [0, 0, passageCeiling]
       pMin[axis] = parentFace; pMax[axis] = parentFace
       pMin[other] = centre - c.width / 2
       pMax[other] = centre + c.width / 2
@@ -246,8 +260,12 @@ export function solve(graph: MapGraph): Layout {
       const centre = (span.lo + span.hi) / 2
       const loZ = Math.min(a.floorZ, b.floorZ)
       const hiZ = Math.max(a.floorZ, b.floorZ)
-      const ceiling = hiZ + (edge.height ??
-        Math.min(byId.get(a.id)!.size[2]!, byId.get(b.id)!.size[2]!))
+      // A corridor never rises above the lower of the two rooms' own ceilings,
+      // even when an explicit height would otherwise push it higher.
+      const roomsCeiling = Math.min(a.bounds.max[2]!, b.bounds.max[2]!)
+      const ceiling = edge.height != null
+        ? Math.min(hiZ + edge.height, roomsCeiling)
+        : roomsCeiling
 
       const pMin: Vec3 = [0, 0, loZ]
       const pMax: Vec3 = [0, 0, ceiling]

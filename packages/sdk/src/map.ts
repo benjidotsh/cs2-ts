@@ -162,6 +162,14 @@ export class CS2Map {
         { parent: parent.name, child: spec.name, direction: connection.direction },
       )
     }
+    if (connection.height != null && connection.height < 0) {
+      throw new AuthoringError(
+        'NEGATIVE_HEIGHT',
+        `connection from "${parent.name}" to "${spec.name}" has negative height ` +
+        `${connection.height}`,
+        { parent: parent.name, child: spec.name, height: connection.height },
+      )
+    }
     const child = this.createRoom(spec)
     this.graph.placements.push({
       parent: parent.id,
@@ -181,6 +189,13 @@ export class CS2Map {
 
   /** Connects two already-placed rooms, closing a cycle. */
   connect(a: Room, b: Room, opts: CrossConnection): void {
+    if (opts.height != null && opts.height < 0) {
+      throw new AuthoringError(
+        'NEGATIVE_HEIGHT',
+        `connection between "${a.name}" and "${b.name}" has negative height ${opts.height}`,
+        { a: a.name, b: b.name, height: opts.height },
+      )
+    }
     this.graph.crossEdges.push({
       a: a.id,
       b: b.id,

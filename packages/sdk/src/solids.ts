@@ -1,6 +1,6 @@
 import { MATERIALS, SLAB_THICKNESS, WALL_THICKNESS } from './defaults'
 import type { Layout, Passage, PlacedRoom } from './solve'
-import type { Aabb, BoxSolid, Solid, Vec3 } from './types'
+import type { BoxSolid, Solid, Vec3 } from './types'
 
 export interface Interval { lo: number; hi: number }
 
@@ -51,8 +51,8 @@ export function toSolids(layout: Layout): Solid[] {
     const hi = passage.bounds.max[other]!
     const top = passage.bounds.max[2]!
 
-    addOpening(from.id, sideFacing(from, passage, true), { lo, hi, top })
-    addOpening(to.id, sideFacing(to, passage, false), { lo, hi, top })
+    addOpening(from.id, sideFacing(from, passage), { lo, hi, top })
+    addOpening(to.id, sideFacing(to, passage), { lo, hi, top })
 
     if (passage.bounds.max[passage.axis]! > passage.bounds.min[passage.axis]!) {
       solids.push(...corridorSolids(passage))
@@ -65,12 +65,15 @@ export function toSolids(layout: Layout): Solid[] {
 
   return solids
 
-  /** Which wall of `room` the passage meets: 'minX' | 'maxX' | 'minY' | 'maxY'. */
-  function sideFacing(room: PlacedRoom, passage: Passage, isFrom: boolean): string {
+  /**
+   * Which wall of `room` the passage meets: 'minX' | 'maxX' | 'minY' | 'maxY'.
+   * A passage always abuts exactly one of the room's two faces on its travel
+   * axis — whichever room is "from" or "to" makes no difference — so a
+   * single test serves both endpoints.
+   */
+  function sideFacing(room: PlacedRoom, passage: Passage): string {
     const axis = passage.axis
-    const roomIsLower = isFrom
-      ? passage.bounds.min[axis]! >= room.bounds.max[axis]! - 1
-      : passage.bounds.max[axis]! <= room.bounds.min[axis]! + 1
+    const roomIsLower = passage.bounds.min[axis]! >= room.bounds.max[axis]!
     const label = axis === 0 ? 'X' : 'Y'
     return roomIsLower ? `max${label}` : `min${label}`
   }
@@ -90,29 +93,36 @@ function corridorSolids(passage: Passage): Solid[] {
   }
   out.push(box(floorMin, floorMax, MATERIALS.floor))
 
-  // Side walls run the length of the corridor, outside its width.
-  for (const side of [-1, 1] as const) {
-    const min: Vec3 = [0, 0, floorTop]
-    const max: Vec3 = [0, 0, bounds.max[2]!]
-    min[axis] = bounds.min[axis]!
-    max[axis] = bounds.max[axis]!
-    if (side === -1) {
-      min[other] = bounds.min[other]! - WALL_THICKNESS
-      max[other] = bounds.min[other]!
-    } else {
-      min[other] = bounds.max[other]!
-      max[other] = bounds.max[other]! + WALL_THICKNESS
+  // A corridor whose computed ceiling doesn't clear its own floor has no
+  // meaningful side walls or ceiling to build; the floor slab still marks it.
+  if (bounds.max[2]! > floorTop) {
+    // Side walls run the length of the corridor, outside its width, inset by
+    // a wall's thickness at each end so they sit between the two rooms' own
+    // walls rather than inside them. A corridor exactly `2 * WALL_THICKNESS`
+    // long needs none — the two rooms' walls already meet with no gap.
+    for (const side of [-1, 1] as const) {
+      const min: Vec3 = [0, 0, floorTop]
+      const max: Vec3 = [0, 0, bounds.max[2]!]
+      min[axis] = bounds.min[axis]! + WALL_THICKNESS
+      max[axis] = bounds.max[axis]! - WALL_THICKNESS
+      if (side === -1) {
+        min[other] = bounds.min[other]! - WALL_THICKNESS
+        max[other] = bounds.min[other]!
+      } else {
+        min[other] = bounds.max[other]!
+        max[other] = bounds.max[other]! + WALL_THICKNESS
+      }
+      if (max[axis]! > min[axis]!) out.push(box(min, max, MATERIALS.wall))
     }
-    out.push(box(min, max, MATERIALS.wall))
-  }
 
-  const ceilMin: Vec3 = [0, 0, bounds.max[2]!]
-  const ceilMax: Vec3 = [0, 0, bounds.max[2]! + SLAB_THICKNESS]
-  for (const i of [0, 1] as const) {
-    ceilMin[i] = bounds.min[i]!
-    ceilMax[i] = bounds.max[i]!
+    const ceilMin: Vec3 = [0, 0, bounds.max[2]!]
+    const ceilMax: Vec3 = [0, 0, bounds.max[2]! + SLAB_THICKNESS]
+    for (const i of [0, 1] as const) {
+      ceilMin[i] = bounds.min[i]!
+      ceilMax[i] = bounds.max[i]!
+    }
+    out.push(box(ceilMin, ceilMax, MATERIALS.ceiling))
   }
-  out.push(box(ceilMin, ceilMax, MATERIALS.ceiling))
 
   return out
 }
@@ -142,7 +152,11 @@ function roomSolids(room: PlacedRoom, openings: Map<string, Opening[]>): Solid[]
 
   for (const { side, axis, at, outward } of sides) {
     const other: 0 | 1 = axis === 0 ? 1 : 0
-    const span: Interval = { lo: bounds.min[other]!, hi: bounds.max[other]! }
+    // The X-axis walls (running north-south) are widened to cover the corner
+    // columns the Y-axis walls leave void; widening both pairs would double
+    // that corner volume instead of filling it.
+    const pad = axis === 0 ? WALL_THICKNESS : 0
+    const span: Interval = { lo: bounds.min[other]! - pad, hi: bounds.max[other]! + pad }
     const holes = openings.get(`${room.id}:${side}`) ?? []
 
     const wallMinAxis = outward === -1 ? at - WALL_THICKNESS : at
