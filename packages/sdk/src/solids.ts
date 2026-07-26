@@ -1,7 +1,8 @@
 import { MATERIALS, SLAB_THICKNESS, WALL_THICKNESS } from './defaults'
+import { overlap1d } from './geometry'
 import type { Layout, Passage, PlacedRoom } from './solve'
 import {
-  Direction, Transition, overlap1d,
+  Direction, Transition,
   type Aabb, type BoxSolid, type Cardinal, type Solid, type Vec3, type WedgeSolid,
 } from './types'
 
@@ -39,6 +40,35 @@ const rising = (axis: 0 | 1, towardMax: boolean): Cardinal =>
     ? (towardMax ? Direction.East : Direction.West)
     : (towardMax ? Direction.North : Direction.South)
 
+/**
+ * One of a room's four vertical faces. Openings are registered against a face
+ * by name and read back by name, so the two spellings have to agree: as a
+ * union they disagree at compile time rather than by quietly filing a doorway
+ * under a key nobody reads, leaving an unbroken wall and a sealed-off room.
+ */
+type Side = `${'min' | 'max'}${'X' | 'Y'}`
+
+type OpeningKey = `${number}:${Side}`
+
+const openingKey = (roomId: number, side: Side): OpeningKey => `${roomId}:${side}`
+
+/** A room's floor or ceiling slab: its whole footprint, with no openings in it. */
+interface Slab { min: Vec3; max: Vec3 }
+
+/**
+ * The two slabs a room lays over its own footprint. Shared with the wall
+ * emitter, which has to know where other rooms' slabs are, so the two views of
+ * the same brush cannot drift apart.
+ */
+function roomSlabs(room: PlacedRoom): [Slab, Slab] {
+  const ceilingZ = room.bounds.max[2]!
+  const [floorMin, floorMax] =
+    footprint(room.bounds, room.floorZ - SLAB_THICKNESS, room.floorZ)
+  const [ceilMin, ceilMax] =
+    footprint(room.bounds, ceilingZ, ceilingZ + SLAB_THICKNESS)
+  return [{ min: floorMin, max: floorMax }, { min: ceilMin, max: ceilMax }]
+}
+
 /** An opening in one wall of one room: a horizontal span and a height range. */
 interface Opening {
   lo: number
@@ -55,14 +85,13 @@ interface Opening {
 
 export function toSolids(layout: Layout): Solid[] {
   const solids: Solid[] = []
-  const openings = new Map<string, Opening[]>()
+  const openings = new Map<OpeningKey, Opening[]>()
   const byId = new Map(layout.rooms.map((r) => [r.id, r]))
-  const key = (roomId: number, side: string) => `${roomId}:${side}`
 
-  const addOpening = (roomId: number, side: string, opening: Opening) => {
-    const list = openings.get(key(roomId, side))
+  const addOpening = (roomId: number, side: Side, opening: Opening) => {
+    const list = openings.get(openingKey(roomId, side))
     if (list) list.push(opening)
-    else openings.set(key(roomId, side), [opening])
+    else openings.set(openingKey(roomId, side), [opening])
   }
 
   // Register the holes each passage punches, then emit corridor geometry.
@@ -85,7 +114,7 @@ export function toSolids(layout: Layout): Solid[] {
     // A passage abuts one face of each room it joins: whichever room sits at
     // the passage's min end is opened on its own max face, and vice versa.
     const label = passage.axis === 0 ? 'X' : 'Y'
-    const [fromSide, toSide]: [string, string] = passage.fromAtMinEnd
+    const [fromSide, toSide]: [Side, Side] = passage.fromAtMinEnd
       ? [`max${label}`, `min${label}`]
       : [`min${label}`, `max${label}`]
 
@@ -103,8 +132,14 @@ export function toSolids(layout: Layout): Solid[] {
     }
   }
 
+  // Each room's walls have to give way to every *other* room's slabs; see
+  // roomSolids. Its own are already flush with its walls.
+  const slabsByRoom = new Map(layout.rooms.map((r) => [r.id, roomSlabs(r)]))
   for (const room of layout.rooms) {
-    solids.push(...roomSolids(room, openings))
+    const foreign = layout.rooms
+      .filter((r) => r.id !== room.id)
+      .flatMap((r) => slabsByRoom.get(r.id)!)
+    solids.push(...roomSolids(room, openings, foreign))
   }
 
   return solids
@@ -223,20 +258,22 @@ function corridorSolids(passage: Passage): Solid[] {
   return out
 }
 
-function roomSolids(room: PlacedRoom, openings: Map<string, Opening[]>): Solid[] {
+function roomSolids(
+  room: PlacedRoom, openings: Map<OpeningKey, Opening[]>, foreignSlabs: Slab[],
+): Solid[] {
   const { bounds, floorZ } = room
   const ceilingZ = bounds.max[2]!
   const out: Solid[] = []
 
-  out.push(box(...footprint(bounds, floorZ - SLAB_THICKNESS, floorZ), MATERIALS.floor))
-  out.push(box(
-    ...footprint(bounds, ceilingZ, ceilingZ + SLAB_THICKNESS), MATERIALS.ceiling))
+  const [floor, ceiling] = roomSlabs(room)
+  out.push(box(floor.min, floor.max, MATERIALS.floor))
+  out.push(box(ceiling.min, ceiling.max, MATERIALS.ceiling))
 
-  const sides = [
-    { side: 'minX', axis: 0 as const, at: bounds.min[0]!, outward: -1 as const },
-    { side: 'maxX', axis: 0 as const, at: bounds.max[0]!, outward: 1 as const },
-    { side: 'minY', axis: 1 as const, at: bounds.min[1]!, outward: -1 as const },
-    { side: 'maxY', axis: 1 as const, at: bounds.max[1]!, outward: 1 as const },
+  const sides: Array<{ side: Side; axis: 0 | 1; at: number; outward: -1 | 1 }> = [
+    { side: 'minX', axis: 0, at: bounds.min[0]!, outward: -1 },
+    { side: 'maxX', axis: 0, at: bounds.max[0]!, outward: 1 },
+    { side: 'minY', axis: 1, at: bounds.min[1]!, outward: -1 },
+    { side: 'maxY', axis: 1, at: bounds.max[1]!, outward: 1 },
   ]
 
   for (const { side, axis, at, outward } of sides) {
@@ -246,17 +283,56 @@ function roomSolids(room: PlacedRoom, openings: Map<string, Opening[]>): Solid[]
     // producing overlapping brushes. The columns are sealed along the shared
     // vertical edge — unreachable and invisible — so they are left as they are.
     const span: Interval = { lo: bounds.min[other]!, hi: bounds.max[other]! }
-    const holes = openings.get(`${room.id}:${side}`) ?? []
+    const holes = openings.get(openingKey(room.id, side)) ?? []
 
     const wallMinAxis = outward === -1 ? at - WALL_THICKNESS : at
     const wallMaxAxis = outward === -1 ? at : at + WALL_THICKNESS
 
+    // A room's wall band sits *outside* its own bounds, which on a flush face
+    // puts it inside the neighbour's — where that neighbour's floor and ceiling
+    // slabs each span the whole footprint. Two rooms at different heights
+    // therefore lay a slab straight across the band, and the brushes
+    // interpenetrate. Equal heights never show it: the band runs exactly
+    // floorZ..ceilingZ, which is precisely where both slabs stop.
+    //
+    // The slab wins. It has no openings in it, so ceding its z-range leaves the
+    // space filled just the same. Cutting the slab instead would punch a hole
+    // wherever the band has a doorway — a Step up into a room opens exactly
+    // there, and its floor slab is the step's face.
+    const cutting = foreignSlabs.filter((s) =>
+      // Only a slab spanning the band's full thickness can stand in for it.
+      s.min[axis]! <= wallMinAxis && s.max[axis]! >= wallMaxAxis)
+
+    /** One piece of the band, less whatever another room's slab already fills. */
+    const emitBand = (lo: number, hi: number, zLo: number, zHi: number) => {
+      const across = cutting.filter((s) =>
+        overlap1d(s.min[other]!, s.max[other]!, lo, hi).size > 0 &&
+        overlap1d(s.min[2]!, s.max[2]!, zLo, zHi).size > 0)
+
+      // Split at every slab edge, so within one run a slab either covers the
+      // whole width or none of it and can be subtracted in z alone.
+      const cuts = [...new Set([lo, hi, ...across
+        .flatMap((s) => [s.min[other]!, s.max[other]!])
+        .filter((v) => v > lo && v < hi)])].sort((x, y) => x - y)
+
+      for (let i = 0; i + 1 < cuts.length; i++) {
+        const runLo = cuts[i]!, runHi = cuts[i + 1]!
+        const filled = across
+          .filter((s) => s.min[other]! <= runLo && s.max[other]! >= runHi)
+          .map((s) => ({ lo: s.min[2]!, hi: s.max[2]! }))
+
+        for (const z of subtractIntervals({ lo: zLo, hi: zHi }, filled)) {
+          const min: Vec3 = [0, 0, z.lo]
+          const max: Vec3 = [0, 0, z.hi]
+          min[axis] = wallMinAxis; max[axis] = wallMaxAxis
+          min[other] = runLo; max[other] = runHi
+          out.push(box(min, max, MATERIALS.wall))
+        }
+      }
+    }
+
     for (const piece of subtractIntervals(span, holes)) {
-      const min: Vec3 = [0, 0, floorZ]
-      const max: Vec3 = [0, 0, ceilingZ]
-      min[axis] = wallMinAxis; max[axis] = wallMaxAxis
-      min[other] = piece.lo; max[other] = piece.hi
-      out.push(box(min, max, MATERIALS.wall))
+      emitBand(piece.lo, piece.hi, floorZ, ceilingZ)
     }
 
     // A lintel spans the gap above any opening that stops short of the
@@ -265,20 +341,36 @@ function roomSolids(room: PlacedRoom, openings: Map<string, Opening[]>): Solid[]
     // without the sill a doorway onto a lower floor — a Transition.Step up
     // into this room — opens straight into the unbounded space beneath the
     // room's floor slab, which no solid owns.
-    for (const hole of holes) {
-      const { lo, hi, size } = overlap1d(hole.lo, hole.hi, span.lo, span.hi)
-      if (size <= 0) continue
-      const caps: Array<[number, number]> = []
-      if (hole.top < ceilingZ) caps.push([hole.top, ceilingZ])
-      if (hole.bottom < floorZ) caps.push([hole.bottom, floorZ])
+    //
+    // Two ways through can share one face — a doorway and a low cross
+    // connection between the same pair of rooms both cut this wall — so the
+    // caps are taken over the merged set rather than one per opening. Capping
+    // each separately would plant the lower opening's lintel inside the taller
+    // one, bricking it up, and stack two brushes wherever they overlap.
+    //
+    // Every opening either covers a whole gap between consecutive opening
+    // edges or misses it entirely, so within one gap the wall is clear up to
+    // the *highest* opening over it and must reach down to the *lowest* floor
+    // outside it.
+    const clipped = holes
+      .map((h) =>
+        ({ ...overlap1d(h.lo, h.hi, span.lo, span.hi), top: h.top, bottom: h.bottom }))
+      .filter((h) => h.size > 0)
+    const edges = [...new Set(clipped.flatMap((h) => [h.lo, h.hi]))]
+      .sort((x, y) => x - y)
 
-      for (const [zMin, zMax] of caps) {
-        const min: Vec3 = [0, 0, zMin]
-        const max: Vec3 = [0, 0, zMax]
-        min[axis] = wallMinAxis; max[axis] = wallMaxAxis
-        min[other] = lo; max[other] = hi
-        out.push(box(min, max, MATERIALS.wall))
-      }
+    for (let i = 0; i + 1 < edges.length; i++) {
+      const lo = edges[i]!, hi = edges[i + 1]!
+      const covering = clipped.filter((h) => h.lo <= lo && h.hi >= hi)
+      if (covering.length === 0) continue
+
+      const caps: Array<[number, number]> = []
+      const top = Math.max(...covering.map((h) => h.top))
+      const bottom = Math.min(...covering.map((h) => h.bottom))
+      if (top < ceilingZ) caps.push([top, ceilingZ])
+      if (bottom < floorZ) caps.push([bottom, floorZ])
+
+      for (const [zMin, zMax] of caps) emitBand(lo, hi, zMin, zMax)
     }
   }
 

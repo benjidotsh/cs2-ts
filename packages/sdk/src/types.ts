@@ -92,23 +92,3 @@ export function directionYaw(d: Direction): number {
     case Direction.SouthEast: return 315
   }
 }
-
-/**
- * Intersection of two 1-D intervals. `size` is non-positive when they merely
- * touch or miss entirely, matching `aabbsOverlap`'s rule that a shared face is
- * not an overlap.
- */
-export function overlap1d(aMin: number, aMax: number, bMin: number, bMax: number):
-{ lo: number; hi: number; size: number } {
-  const lo = Math.max(aMin, bMin)
-  const hi = Math.min(aMax, bMax)
-  return { lo, hi, size: hi - lo }
-}
-
-/** True only for genuine volume intersection; shared faces are not overlaps. */
-export function aabbsOverlap(a: Aabb, b: Aabb): boolean {
-  for (let i = 0; i < 3; i++) {
-    if (a.max[i]! <= b.min[i]! || b.max[i]! <= a.min[i]!) return false
-  }
-  return true
-}

@@ -1,10 +1,8 @@
 import { MAX_STEP_RISE, WALL_THICKNESS, WORLD_LIMIT } from './defaults'
 import { SolverError } from './errors'
 import type { CrossEdge, MapGraph, PlacementEdge, RoomNode } from './map'
-import {
-  Direction, Transition, aabbsOverlap, overlap1d,
-  type Aabb, type Cardinal, type Vec3,
-} from './types'
+import { aabbsOverlap, overlap1d } from './geometry'
+import { Direction, Transition, type Aabb, type Cardinal, type Vec3 } from './types'
 
 export interface PlacedRoom {
   id: number
@@ -20,10 +18,14 @@ export interface Passage {
   /** 0 when the passage runs along X, 1 when it runs along Y. */
   axis: 0 | 1
   /**
-   * Whether `from` sits at `bounds.min[axis]` rather than `bounds.max[axis]`.
-   * Which physical end each room occupies follows from the connection's
-   * direction, which only the solver sees — recording it costs nothing here and
-   * saves everything downstream from re-deriving it out of the placed bounds.
+   * Which end of the passage `from` sits at: true for the low end of `axis`,
+   * false for the high end. This is the connection's own direction, recorded
+   * because only the solver sees it — it is *not* a fact about `bounds`, which
+   * cannot answer it at all for a flush doorway (where min and max coincide),
+   * and a flush doorway is exactly the case where `toSolids` needs it to decide
+   * which room's wall to open. Re-deriving it from the bounds would face both
+   * rooms' doorways the wrong way and leave the shared wall solid: a map that
+   * seals cleanly and cannot be walked through.
    */
   fromAtMinEnd: boolean
   fromZ: number
@@ -225,8 +227,9 @@ export function solve(graph: MapGraph): Layout {
   }
 
   const rooms = [...placed.values()]
-  detectOverlaps(rooms, passages)
-  checkWorldBounds(rooms, passages)
+  const nameOf = (id: number) => byId.get(id)!.name
+  detectOverlaps(rooms, passages, nameOf)
+  checkWorldBounds(rooms, passages, nameOf)
 
   return { name: graph.name, rooms, passages }
 
@@ -422,9 +425,10 @@ export function solve(graph: MapGraph): Layout {
  * represent geometry past +/-16384 on any axis, and a map that runs past it
  * fails in the compiler (or worse, silently) rather than here.
  */
-function checkWorldBounds(rooms: PlacedRoom[], passages: Passage[]): void {
+function checkWorldBounds(
+  rooms: PlacedRoom[], passages: Passage[], nameOf: (id: number) => string,
+): void {
   const AXES = ['x', 'y', 'z'] as const
-  const nameOf = roomNames(rooms)
 
   const check = (bounds: Aabb, what: string, detail: Record<string, unknown>) => {
     for (let k = 0; k < 3; k++) {
@@ -445,15 +449,15 @@ function checkWorldBounds(rooms: PlacedRoom[], passages: Passage[]): void {
     check(room.bounds, `room "${room.name}"`, { room: room.name })
   }
   for (const passage of passages) {
-    const from = nameOf.get(passage.from)!, to = nameOf.get(passage.to)!
+    const from = nameOf(passage.from), to = nameOf(passage.to)
     check(passage.bounds, `the corridor between "${from}" and "${to}"`,
       { rooms: [from, to] })
   }
 }
 
-function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
-  const nameOf = roomNames(rooms)
-
+function detectOverlaps(
+  rooms: PlacedRoom[], passages: Passage[], nameOf: (id: number) => string,
+): void {
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
       const a = rooms[i]!, b = rooms[j]!
@@ -469,16 +473,18 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
     }
   }
 
-  // A corridor may not drive through a room it does not connect. Zero-length
-  // passages are just doorway markers and are skipped.
-  for (const passage of passages) {
-    if (passage.bounds.min[passage.axis]! === passage.bounds.max[passage.axis]!) {
-      continue
-    }
+  // Zero-length passages are just doorway markers, with no volume of their own
+  // to collide with anything.
+  const corridors = passages.filter(
+    (p) => p.bounds.max[p.axis]! > p.bounds.min[p.axis]!)
+  const between = (p: Passage) => [nameOf(p.from), nameOf(p.to)]
+
+  // A corridor may not drive through a room it does not connect.
+  for (const passage of corridors) {
     for (const room of rooms) {
       if (room.id === passage.from || room.id === passage.to) continue
       if (!aabbsOverlap(passage.bounds, room.bounds)) continue
-      const from = nameOf.get(passage.from)!, to = nameOf.get(passage.to)!
+      const [from, to] = between(passage)
       throw new SolverError(
         'OVERLAP',
         `the corridor between "${from}" and "${to}" ` +
@@ -487,7 +493,29 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
       )
     }
   }
-}
 
-const roomNames = (rooms: PlacedRoom[]) =>
-  new Map(rooms.map((r) => [r.id, r.name]))
+  // Nor through another corridor. Two that cross sever each other: each one's
+  // side walls stand solid across the other's interior, so the map compiles
+  // and neither route goes anywhere.
+  //
+  // Two corridors joining the *same* pair of rooms are exempt: they run in the
+  // same gap and so overlap by construction, which is a second way through the
+  // same wall — untidy, but not a severed route.
+  const sameRooms = (p: Passage, q: Passage) =>
+    (p.from === q.from && p.to === q.to) || (p.from === q.to && p.to === q.from)
+
+  for (let i = 0; i < corridors.length; i++) {
+    for (let j = i + 1; j < corridors.length; j++) {
+      const p = corridors[i]!, q = corridors[j]!
+      if (sameRooms(p, q)) continue
+      if (!aabbsOverlap(p.bounds, q.bounds)) continue
+      const [pFrom, pTo] = between(p), [qFrom, qTo] = between(q)
+      throw new SolverError(
+        'OVERLAP',
+        `the corridor between "${pFrom}" and "${pTo}" crosses the corridor ` +
+        `between "${qFrom}" and "${qTo}"`,
+        { rooms: [pFrom, pTo], crosses: [qFrom, qTo] },
+      )
+    }
+  }
+}

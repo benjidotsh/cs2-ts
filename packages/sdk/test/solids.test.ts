@@ -225,3 +225,64 @@ test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
     }
   },
 )
+
+// Two ways through can share one wall face: a full-height doorway and a
+// low cross connection between the same pair of rooms, for instance. A lintel
+// per opening then bricks up the middle of the taller one and stacks two
+// brushes wherever the openings overlap.
+test('a low opening overlapping a taller one neither bricks it up nor duplicates brush', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [1024, 512, 192] })
+  const b = a.room({ name: 'b', size: [1024, 512, 192] },
+    { direction: Direction.North, width: 192, length: 0 })
+  map.connect(a, b, { width: 128, height: 64 })
+  const solids = toSolids(solve(map.graph))
+
+  // The 192-wide doorway runs the full height of the shared wall (y 240..272),
+  // so every height in it is clear across its whole width.
+  for (const x of [-80, -32, 0, 32, 80]) {
+    for (const y of [248, 264]) {
+      for (const z of [32, 96, 160]) {
+        expect(insideAny(solids, [x, y, z])).toBe(false)
+      }
+    }
+  }
+
+  // Both passages are flush, so there is no corridor and nothing here is
+  // allowed to overlap anything (see the corner-column test below).
+  for (let i = 0; i < solids.length; i++) {
+    for (let j = i + 1; j < solids.length; j++) {
+      expect(overlapVolume(solids[i]!, solids[j]!)).toBe(0)
+    }
+  }
+})
+
+// Rooms at different floor heights put each room's wall band across the
+// *neighbour's* floor or ceiling slab: the band reaches 16 units into the
+// neighbour's footprint, and a slab spans its whole footprint, so the two
+// brushes interpenetrate wherever the band's height range straddles the slab.
+// Equal-height rooms never show it — the band ends exactly where the slabs
+// begin — which is why the sweep above missed it.
+test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+  'a flush pair at different floor heights emits no overlapping brushes, facing %s',
+  (direction) => {
+    for (const rise of [48, 64, -64]) {
+      const map = new CS2Map('t')
+      const a = map.room({ name: 'a', size: [512, 512, 192] })
+      a.room({ name: 'b', size: [512, 512, 192] },
+        { direction, width: 192, length: 0, rise, via: Transition.Step })
+      const solids = toSolids(solve(map.graph))
+
+      const overlaps: string[] = []
+      for (let i = 0; i < solids.length; i++) {
+        for (let j = i + 1; j < solids.length; j++) {
+          if (overlapVolume(solids[i]!, solids[j]!) > 0) {
+            overlaps.push(`rise=${rise} [${solids[i]!.min}]-[${solids[i]!.max}]` +
+              ` x [${solids[j]!.min}]-[${solids[j]!.max}]`)
+          }
+        }
+      }
+      expect(overlaps).toEqual([])
+    }
+  },
+)

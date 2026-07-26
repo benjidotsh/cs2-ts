@@ -233,6 +233,31 @@ test('a corridor driving through a third room is an overlap', () => {
   }
 })
 
+test('two corridors crossing each other is an overlap', () => {
+  // c and d hang off b's south wall either side of the a -> b corridor, so the
+  // corridor between them runs straight across it. Neither room overlaps
+  // anything; only the two corridors do, which nothing was checking.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  const b = a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 512 })
+  const c = b.room({ name: 'c', size: [704, 512, 192] },
+    { direction: Direction.South, width: 128, length: 0, offset: -416 })
+  const d = b.room({ name: 'd', size: [704, 512, 192] },
+    { direction: Direction.South, width: 128, length: 0, offset: 416 })
+  map.connect(c, d, { width: 128 })
+
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    expect((e as SolverError).code).toBe('OVERLAP')
+    expect((e as SolverError).detail.rooms).toEqual(['a', 'b'])
+    expect((e as SolverError).detail.crosses).toEqual(['c', 'd'])
+  }
+})
+
 test('an unroutable cross connection is rejected', () => {
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
