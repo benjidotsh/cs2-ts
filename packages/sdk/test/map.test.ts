@@ -109,9 +109,9 @@ test('gameplay helpers record requests with defaults applied', () => {
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   a.spawns(Team.T, { count: 10, align: Align.Bottom, facing: Direction.North })
   a.bombsite(Bombsite.A)
-  a.entity('light_omni', { at: [0, 0, 128] })
+  a.entity('light_omni2', { at: [0, 0, 128] })
 
   expect(a.node.spawns[0]).toMatchObject({ team: Team.T, count: 10, spacing: 128 })
   expect(a.node.bombsites[0]).toMatchObject({ site: Bombsite.A, size: null })
-  expect(a.node.entities[0]).toMatchObject({ classname: 'light_omni' })
+  expect(a.node.entities[0]).toMatchObject({ classname: 'light_omni2' })
 })

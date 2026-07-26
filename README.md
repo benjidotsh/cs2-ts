@@ -76,14 +76,34 @@ const conn = tSpawn.room({ name: 'connector', size: [1024, 768, 192] },
 // height difference is derived, not authored — the ramp follows from it
 map.connect(conn, aSite, { width: 192 })
 
+// the defending side needs somewhere of its own to start
+const ctSpawn = aSite.room({ name: 'ctSpawn', size: [1024, 768, 192] },
+                           { direction: Direction.North, width: 256, length: 512 })
+
 tSpawn.spawns(Team.T, {
   count: 10,
   align: Align.Bottom,
   at: [0, 192, 0],           // nudge the grid clear of the south wall
   facing: Direction.North,
 })
+ctSpawn.spawns(Team.CT, {
+  count: 10,
+  align: Align.Top,
+  at: [0, -192, 0],          // nudge the grid clear of the north wall
+  facing: Direction.South,   // looking back toward the site
+})
 aSite.bombsite(Bombsite.A, { size: [512, 512, 128] })
-mid.entity('light_omni', { at: [0, 0, 128] })
+// light_omni2, not light_omni: CS2 has no such class, only the editor icon
+// the omni2 uses. colormode 0 matters — csgo.fgd overrides the default to
+// colour temperature, which would leave `color` inert.
+mid.entity('light_omni2', { at: [0, 0, 128] }, {
+  enabled: true,
+  colormode: 0,
+  color: '255 255 255',
+  brightness_units: 1,       // lumens
+  brightness_lumens: 2000,
+  range: 512,
+})
 
 export default map
 ```
@@ -104,13 +124,23 @@ tSpawn     [-512,  512]     [-384,  384]     0        (anchor)
 mid        [-768,  768]     [ 896, 1920]     0
 aSite      [1152, 2176]     [ 896, 1920]     128
 connector  [ 768, 1792]     [-384,  384]     0
+ctSpawn    [1152, 2176]     [2432, 3200]     128
 
 corridor            x                y             note
 tSpawn → mid        [ -96,   96]     [ 384,  896]
 mid → aSite         [ 768, 1152]     [1280, 1536]  ramp 0 → 128 over 384
 tSpawn → connector  [ 512,  768]     [ -96,   96]
+aSite → ctSpawn     [1536, 1792]     [1920, 2432]
 connector → aSite   [1376, 1568]     [ 384,  896]  ramp 0 → 128 over 512, derived
 ```
+
+A corridor's ceiling climbs with its floor, so a ramp costs no headroom: both
+ramps above keep their full clear height end to end (256 and 192 units
+respectively) rather than pinching down by the 128 they climb. The clear
+height is the smaller of the two rooms' own interiors unless the connection
+names a `height`, and each end is capped at the ceiling of the room it opens
+into — so `connector → aSite` runs from 192 at the connector to 320 inside
+the site.
 
 Note that `connector → aSite` isn't authored anywhere in the module — its position,
 width and ramp are entirely derived from where `connector` and `aSite` ended up.
@@ -141,8 +171,8 @@ cs2ts build map.ts --addon my_addon                  # production compile
 ```
 
 For `de_example.ts` above, `cs2ts preview` compiles in about 3 seconds. `cs2ts build`
-— which adds `vis`, `nav`, and a baked 1024×1024 lightmap via `vrad3` — takes about 67
-seconds and produced a 1.79 MB `.vpk`.
+— which adds `vis`, `nav`, and a baked 1024×1024 lightmap via `vrad3` — takes about
+2 minutes 40 and produced a 3.12 MB `.vpk`.
 
 `emit` is the odd one out: give it `--out <path>` and it writes a `.vmap` straight to
 that path with no CS2 install involved at all (see [Prerequisites](#prerequisites)).
