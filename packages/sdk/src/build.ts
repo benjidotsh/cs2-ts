@@ -12,8 +12,7 @@ import { serializeVmap, type VmapEntity } from './vmap/document'
  * just room bounds), so enclosing the compiled geometry is structural rather
  * than a coincidence of wall thickness staying inside the padding.
  */
-export function lightmapVolumeSolid(layout: Layout): Solid {
-  const solids = toSolids(layout)
+export function lightmapVolumeSolid(solids: Solid[]): Solid {
   const min: Vec3 = [Infinity, Infinity, Infinity]
   const max: Vec3 = [-Infinity, -Infinity, -Infinity]
   for (const solid of solids) {
@@ -86,7 +85,7 @@ export function boilerplateEntities(layout: Layout): VmapEntity[] {
 export function buildVmap(map: CS2Map): string {
   const layout = solve(map.graph)
   const solids = toSolids(layout)
-  solids.push(lightmapVolumeSolid(layout))
+  solids.push(lightmapVolumeSolid(solids))
 
   // An explicitly authored classname is a deliberate override — skip
   // injecting the boilerplate version so e.g. a hand-authored

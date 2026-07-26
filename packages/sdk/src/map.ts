@@ -9,6 +9,19 @@ export interface RoomSpec {
   size: Vec3
 }
 
+/** A connection's height is the clear height of the way through, if given. */
+function assertPositiveHeight(
+  what: string, height: number | undefined, detail: Record<string, unknown>,
+): void {
+  if (height == null || height > 0) return
+  throw new AuthoringError(
+    'NEGATIVE_HEIGHT',
+    `${what} has height ${height}; a connection's height is the clear height of ` +
+    'the way through and must be greater than 0',
+    { ...detail, height },
+  )
+}
+
 export interface Connection {
   direction: Cardinal
   width: number
@@ -162,15 +175,9 @@ export class CS2Map {
         { parent: parent.name, child: spec.name, direction: connection.direction },
       )
     }
-    if (connection.height != null && connection.height <= 0) {
-      throw new AuthoringError(
-        'NEGATIVE_HEIGHT',
-        `connection from "${parent.name}" to "${spec.name}" has height ` +
-        `${connection.height}; a connection's height is the clear height of the way ` +
-        'through and must be greater than 0',
-        { parent: parent.name, child: spec.name, height: connection.height },
-      )
-    }
+    assertPositiveHeight(
+      `connection from "${parent.name}" to "${spec.name}"`, connection.height,
+      { parent: parent.name, child: spec.name })
     const child = this.createRoom(spec)
     this.graph.placements.push({
       parent: parent.id,
@@ -190,15 +197,9 @@ export class CS2Map {
 
   /** Connects two already-placed rooms, closing a cycle. */
   connect(a: Room, b: Room, opts: CrossConnection): void {
-    if (opts.height != null && opts.height <= 0) {
-      throw new AuthoringError(
-        'NEGATIVE_HEIGHT',
-        `connection between "${a.name}" and "${b.name}" has height ${opts.height}; ` +
-        "a connection's height is the clear height of the way through and must be " +
-        'greater than 0',
-        { a: a.name, b: b.name, height: opts.height },
-      )
-    }
+    assertPositiveHeight(
+      `connection between "${a.name}" and "${b.name}"`, opts.height,
+      { a: a.name, b: b.name })
     this.graph.crossEdges.push({
       a: a.id,
       b: b.id,

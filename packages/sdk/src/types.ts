@@ -39,10 +39,6 @@ export interface Placement {
   facing?: Direction | number
 }
 
-export interface Extent {
-  size: Vec3
-}
-
 export interface Aabb {
   min: Vec3
   max: Vec3
@@ -95,6 +91,18 @@ export function directionYaw(d: Direction): number {
     case Direction.South: return 270
     case Direction.SouthEast: return 315
   }
+}
+
+/**
+ * Intersection of two 1-D intervals. `size` is non-positive when they merely
+ * touch or miss entirely, matching `aabbsOverlap`'s rule that a shared face is
+ * not an overlap.
+ */
+export function overlap1d(aMin: number, aMax: number, bMin: number, bMax: number):
+{ lo: number; hi: number; size: number } {
+  const lo = Math.max(aMin, bMin)
+  const hi = Math.min(aMax, bMax)
+  return { lo, hi, size: hi - lo }
 }
 
 /** True only for genuine volume intersection; shared faces are not overlaps. */

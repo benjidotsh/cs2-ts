@@ -15,8 +15,6 @@ async function fakeInstall(withTools: boolean) {
   }
   return {
     root,
-    rootWin: 'C:\\fake',
-    gameCsgo: join(root, 'game', 'csgo'),
     gameCsgoWin: 'C:\\fake\\game\\csgo',
     binDir: join(root, 'game', 'bin', 'win64'),
     resourceCompiler: join(root, 'game', 'bin', 'win64', 'resourcecompiler.exe'),

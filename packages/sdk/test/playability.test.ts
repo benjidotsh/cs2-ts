@@ -7,8 +7,9 @@ import { solve } from '../src/solve'
 import type { Passage, PlacedRoom } from '../src/solve'
 import { toSolids } from '../src/solids'
 import { Direction } from '../src/types'
-import type { Solid, Vec3, WedgeSolid } from '../src/types'
+import type { Solid, Vec3 } from '../src/types'
 import { analyseSeal } from './support/seal'
+import { wedgeSurfaceAt } from './support/wedge'
 
 /**
  * This is the substitute for the human walkthrough Task 17 hands off to a
@@ -27,30 +28,18 @@ const solids = toSolids(layout)
 const PLAYER_HEIGHT = 64
 
 /**
- * Unlike `insideAny` in solids.test.ts / ramps.test.ts, this treats a wedge
- * as the sloped triangular prism it actually is, not its bounding box. That
- * distinction only matters once you march a line *through* a ramp rather
- * than just probing past a flat wall: the reference map's two ramps are
- * tuned tightly enough (see the report) that treating them as solid up to
- * their full bounding-box height produces false "blocked" collisions a
- * player would never actually hit.
+ * Unlike `insideAny` in solids.test.ts, this treats a wedge as the sloped
+ * triangular prism it actually is, not its bounding box. That distinction only
+ * matters once you march a line *through* a ramp rather than just probing past
+ * a flat wall: the reference map's two ramps are tuned tightly enough (see the
+ * report) that treating them as solid up to their full bounding-box height
+ * produces false "blocked" collisions a player would never actually hit.
  */
-function wedgeSlopeAt(s: WedgeSolid, x: number, y: number): number {
-  const [x0, y0, z0] = s.min
-  const [x1, y1, z1] = s.max
-  switch (s.rise) {
-    case Direction.East: return z0 + (z1 - z0) * (x - x0) / (x1 - x0)
-    case Direction.West: return z0 + (z1 - z0) * (x1 - x) / (x1 - x0)
-    case Direction.North: return z0 + (z1 - z0) * (y - y0) / (y1 - y0)
-    case Direction.South: return z0 + (z1 - z0) * (y1 - y) / (y1 - y0)
-  }
-}
-
 function insideSolid(s: Solid, p: readonly [number, number, number]): boolean {
   if (p[0] <= s.min[0]! || p[0] >= s.max[0]!) return false
   if (p[1] <= s.min[1]! || p[1] >= s.max[1]!) return false
   if (s.kind === 'box') return p[2] > s.min[2]! && p[2] < s.max[2]!
-  const slope = wedgeSlopeAt(s, p[0], p[1])
+  const slope = wedgeSurfaceAt(s, p[0], p[1])
   // A ceiling wedge is solid above its slope, a ramp below it.
   return s.inverted
     ? p[2] > slope && p[2] < s.max[2]!
@@ -78,7 +67,7 @@ function surfaceHeightAt(all: Solid[], x: number, y: number, ceilingCap: number)
     if (y <= s.min[1]! || y >= s.max[1]!) continue
     // An upside-down wedge is a ceiling; nothing stands on its underside.
     if (s.kind === 'wedge' && s.inverted) continue
-    const top = s.kind === 'box' ? s.max[2]! : wedgeSlopeAt(s, x, y)
+    const top = s.kind === 'box' ? s.max[2]! : wedgeSurfaceAt(s, x, y)
     if (top > ceilingCap + 1e-6) continue
     if (best === null || top > best) best = top
   }

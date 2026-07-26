@@ -73,11 +73,7 @@ test('rejects a module whose default export is some other object', async () => {
 
 test('init creates both addon directories and addoninfo.txt', async () => {
   const root = await mkdtemp(join(tmpdir(), 'cs2ts-install-'))
-  const install = {
-    root, rootWin: 'C:\\x', gameCsgo: '', gameCsgoWin: '',
-    binDir: '', resourceCompiler: '', cs2Exe: '',
-  }
-  await initAddon(install, 'my_addon')
+  await initAddon({ root }, 'my_addon')
   expect(await Bun.file(join(root, 'game', 'csgo_addons', 'my_addon', 'addoninfo.txt')).exists())
     .toBe(true)
   expect(await Bun.file(join(root, 'content', 'csgo_addons', 'my_addon', 'maps', '.keep')).exists())
@@ -93,11 +89,7 @@ test('a map name that is really a path is rejected before anything is written', 
   await Bun.write(file, MAP_SOURCE.replace('de_fixture', '../../../evil'))
 
   const root = await mkdtemp(join(tmpdir(), 'cs2ts-install-'))
-  const install = {
-    root, rootWin: 'C:\\x', gameCsgo: '', gameCsgoWin: '',
-    binDir: '', resourceCompiler: '', cs2Exe: '',
-  }
-  await expect(emitMap({ file, install, addon: 'my_addon' }))
+  await expect(emitMap({ file, install: { root }, addon: 'my_addon' }))
     .rejects.toThrow('is not a usable map name')
 
   const escaped = join(root, 'content', 'evil.vmap')
@@ -106,11 +98,7 @@ test('a map name that is really a path is rejected before anything is written', 
 
 test('an addon name that is really a path is rejected before anything is created', async () => {
   const root = await mkdtemp(join(tmpdir(), 'cs2ts-install-'))
-  const install = {
-    root, rootWin: 'C:\\x', gameCsgo: '', gameCsgoWin: '',
-    binDir: '', resourceCompiler: '', cs2Exe: '',
-  }
-  await expect(initAddon(install, '../../../evil'))
+  await expect(initAddon({ root }, '../../../evil'))
     .rejects.toThrow('is not a usable addon name')
   expect(await Bun.file(join(root, 'evil', 'addoninfo.txt')).exists()).toBe(false)
 })

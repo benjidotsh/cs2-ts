@@ -5,7 +5,7 @@ import type { Layout, PlacedRoom } from './solve'
 import type { VmapEntity } from './vmap/document'
 import {
   Align, Bombsite, Surface, Team, directionYaw,
-  type BoxSolid, type Placement, type Vec3,
+  type Placement, type Vec3,
 } from './types'
 
 /** -1 = min edge, 0 = centre, +1 = max edge, in (horizontal, vertical) order. */
@@ -104,14 +104,23 @@ const TEAM_NUM: Record<Team, number> = {
   [Team.CT]: 3,
 }
 
-/** A world-space box, as a brush entity's volume is always given. */
-function triggerBox(min: Vec3, max: Vec3): BoxSolid {
-  return { kind: 'box', min, max, material: MATERIALS.trigger }
-}
-
-/** Valve puts a brush entity's origin at the centre of its own brush. */
-function centre(min: Vec3, max: Vec3): Vec3 {
-  return [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]
+/**
+ * A brush entity: its volume is world-space geometry rather than keyvalues, and
+ * Valve puts its origin at the centre of that volume.
+ */
+function brushEntity(
+  classname: string,
+  min: Vec3,
+  max: Vec3,
+  properties: Record<string, string | number | boolean>,
+): VmapEntity {
+  return {
+    classname,
+    origin: [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2],
+    angles: [0, 0, 0],
+    properties,
+    solids: [{ kind: 'box', min, max, material: MATERIALS.trigger }],
+  }
 }
 
 export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
@@ -198,25 +207,19 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
     // with mins/maxs — only where the bounds live has changed.
     const min: Vec3 = [origin[0] - size[0] / 2, origin[1] - size[1] / 2, origin[2]]
     const max: Vec3 = [origin[0] + size[0] / 2, origin[1] + size[1] / 2, origin[2] + size[2]]
-    out.push({
-      classname: 'func_bomb_target',
-      origin: centre(min, max),
-      angles: [0, 0, 0],
-      // The full keyvalue set Hammer writes for this class, matching
-      // template_defuse.vmap: the Parentname base's keys, then the class's own.
-      properties: {
-        parentname: '',
-        parentAttachmentName: '',
-        'local.origin': '',
-        'local.angles': '',
-        'local.scales': '',
-        useLocalOffset: 0,
-        heistbomb: 0,
-        bomb_mount_target: '',
-        bomb_site_designation: SITE_DESIGNATION[req.site],
-      },
-      solids: [triggerBox(min, max)],
-    })
+    // The full keyvalue set Hammer writes for this class, matching
+    // template_defuse.vmap: the Parentname base's keys, then the class's own.
+    out.push(brushEntity('func_bomb_target', min, max, {
+      parentname: '',
+      parentAttachmentName: '',
+      'local.origin': '',
+      'local.angles': '',
+      'local.scales': '',
+      useLocalOffset: 0,
+      heistbomb: 0,
+      bomb_mount_target: '',
+      bomb_site_designation: SITE_DESIGNATION[req.site],
+    }))
   }
 
   // A buy zone is injected rather than authored: it is map-level ceremony in
@@ -225,25 +228,22 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
   // the room's whole interior, for the team that spawns there.
   const teams = [...new Set(node.spawns.map((s) => s.team))]
   for (const team of teams) {
-    const min: Vec3 = [room.bounds.min[0]!, room.bounds.min[1]!, room.floorZ]
-    const max: Vec3 = [room.bounds.max[0]!, room.bounds.max[1]!, room.bounds.max[2]!]
-    out.push({
-      classname: 'func_buyzone',
-      origin: centre(min, max),
-      angles: [0, 0, 0],
-      properties: { TeamNum: TEAM_NUM[team] },
-      solids: [triggerBox(min, max)],
-    })
+    out.push(brushEntity(
+      'func_buyzone',
+      [room.bounds.min[0]!, room.bounds.min[1]!, room.floorZ],
+      [room.bounds.max[0]!, room.bounds.max[1]!, room.bounds.max[2]!],
+      { TeamNum: TEAM_NUM[team] },
+    ))
   }
 
   return out
 }
 
 export function layoutEntities(layout: Layout, graph: MapGraph): VmapEntity[] {
+  const byId = new Map(graph.rooms.map((r) => [r.id, r]))
   const out: VmapEntity[] = []
   for (const room of layout.rooms) {
-    const node = graph.rooms.find((r) => r.id === room.id)!
-    out.push(...roomEntities(room, node))
+    out.push(...roomEntities(room, byId.get(room.id)!))
   }
   return out
 }

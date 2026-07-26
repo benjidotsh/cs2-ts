@@ -28,15 +28,19 @@ export async function initAddon(
   addon: string,
 ): Promise<string> {
   assertSafeName('addon', addon)
-  const contentMaps = join(install.root, 'content', 'csgo_addons', addon, 'maps')
+  const contentDir = join(install.root, 'content', 'csgo_addons', addon)
   const gameDir = join(install.root, 'game', 'csgo_addons', addon)
 
-  await mkdir(contentMaps, { recursive: true })
-  await mkdir(join(gameDir, 'maps'), { recursive: true })
-  await writeFile(join(contentMaps, '.keep'), '')
-  await writeFile(join(gameDir, 'addoninfo.txt'), ADDONINFO)
+  await Promise.all([
+    mkdir(join(contentDir, 'maps'), { recursive: true }),
+    mkdir(join(gameDir, 'maps'), { recursive: true }),
+  ])
+  await Promise.all([
+    writeFile(join(contentDir, 'maps', '.keep'), ''),
+    writeFile(join(gameDir, 'addoninfo.txt'), ADDONINFO),
+  ])
 
-  return join(install.root, 'content', 'csgo_addons', addon)
+  return contentDir
 }
 
 // `| undefined` is explicit rather than using `?:` because the root tsconfig
@@ -45,7 +49,7 @@ export async function initAddon(
 export interface EmitOptions {
   file: string
   out?: string | undefined
-  install?: Cs2Install | undefined
+  install?: Pick<Cs2Install, 'root'> | undefined
   addon?: string | undefined
 }
 

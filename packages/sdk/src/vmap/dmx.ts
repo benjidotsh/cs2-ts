@@ -4,11 +4,10 @@ export type DmxValue =
   | { kind: 'int'; value: number }
   | { kind: 'float'; value: number }
   | { kind: 'uint64'; value: string }
-  | { kind: 'vector2' | 'vector3' | 'vector4' | 'qangle' | 'color'; value: number[] }
+  | { kind: 'vector3' | 'vector4' | 'qangle' | 'color'; value: number[] }
   | { kind: 'element'; value: DmxElement | null }
   | { kind: 'element_array'; value: DmxElement[] }
   | { kind: 'int_array'; value: number[] }
-  | { kind: 'float_array'; value: number[] }
   | { kind: 'string_array'; value: string[] }
   | { kind: 'vector2_array' | 'vector3_array' | 'vector4_array'; value: number[][] }
 
@@ -36,8 +35,12 @@ export function formatFloat(n: number): string {
   if (Math.abs(n) >= 1e21) {
     throw new RangeError(`number too large to serialize as plain decimal: ${n}`)
   }
-  const v = Object.is(n, -0) ? 0 : n
-  const s = v.toFixed(10).replace(/0+$/, '').replace(/\.$/, '')
+  // Integers stringify exactly and never in exponent form below 1e21, which is
+  // the overwhelming majority of what a map contains: positions, normals, most
+  // UVs. Going through toFixed(10) only to trim the ten zeros back off again
+  // costs about a third of the whole serialization pass.
+  if (Number.isInteger(n)) return n === 0 ? '0' : String(n)
+  const s = n.toFixed(10).replace(/0+$/, '').replace(/\.$/, '')
   return s === '-0' ? '0' : s
 }
 
@@ -50,7 +53,7 @@ function scalar(value: DmxValue): string | null {
     case 'int': return String(Math.trunc(value.value))
     case 'float': return formatFloat(value.value)
     case 'uint64': return value.value
-    case 'vector2': case 'vector3': case 'vector4':
+    case 'vector3': case 'vector4':
     case 'qangle': case 'color':
       return vec(value.value)
     default: return null
@@ -60,7 +63,6 @@ function scalar(value: DmxValue): string | null {
 function arrayItems(value: DmxValue): string[] | null {
   switch (value.kind) {
     case 'int_array': return value.value.map((n) => String(Math.trunc(n)))
-    case 'float_array': return value.value.map(formatFloat)
     case 'string_array': return value.value
     case 'vector2_array': case 'vector3_array': case 'vector4_array':
       return value.value.map(vec)

@@ -2,8 +2,7 @@ import { expect, test } from 'bun:test'
 import { compilerArgs, launchMap } from '../src/compile'
 
 const install = {
-  root: '/mnt/c/cs2', rootWin: 'C:\\cs2',
-  gameCsgo: '/mnt/c/cs2/game/csgo', gameCsgoWin: 'C:\\cs2\\game\\csgo',
+  root: '/mnt/c/cs2', gameCsgoWin: 'C:\\cs2\\game\\csgo',
   binDir: '', resourceCompiler: '', cs2Exe: '',
 }
 

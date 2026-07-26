@@ -113,24 +113,7 @@ test.each(CARDINALS)('wedge rising toward %s is closed and wound outward', (rise
   expect([v, e, f]).toEqual([6, 9, 5])
   expect(v - e + f).toBe(2)
 
-  const centroid: Vec3 = [0, 0, 0]
-  for (const p of poly.positions) {
-    centroid[0] += p[0] / poly.positions.length
-    centroid[1] += p[1] / poly.positions.length
-    centroid[2] += p[2] / poly.positions.length
-  }
-
-  // Every corner of every face must sit on the outward side of that face.
-  for (const loop of poly.faces) {
-    const n = newellNormal(poly.positions, loop)
-    for (const idx of loop) {
-      const p = poly.positions[idx]!
-      const dot = (p[0] - centroid[0]) * n[0]
-        + (p[1] - centroid[1]) * n[1]
-        + (p[2] - centroid[2]) * n[2]
-      expect(dot).toBeGreaterThan(0)
-    }
-  }
+  assertWoundOutward(poly)
 
   // Exactly two vertices at the top, both on the rise side.
   const top = poly.positions.filter((p) => p[2] === 32)

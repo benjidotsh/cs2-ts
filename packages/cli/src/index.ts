@@ -1,4 +1,5 @@
 #!/usr/bin/env bun
+import { basename } from 'node:path'
 import { Command } from 'commander'
 import { findCs2Install, preflight } from './install'
 import { assertSafeName, emitMap, initAddon } from './commands'
@@ -72,7 +73,7 @@ for (const [name, preset, description] of [
         ? { lightmapVRadQuality: opts.lightmapQuality } : {}),
     })
 
-    const mapName = written.split('/').pop()!.replace(/\.vmap$/, '')
+    const mapName = basename(written, '.vmap')
     console.log(`compiled ${mapName}`)
     if (preset === 'preview') await launchMap(install, opts.addon, mapName)
   })

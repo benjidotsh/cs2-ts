@@ -7,6 +7,7 @@ import type { Layout, Passage } from '../src/solve'
 import { toSolids } from '../src/solids'
 import { Direction, Transition } from '../src/types'
 import type { Cardinal, Solid, Vec3 } from '../src/types'
+import { wedgeSurfaceAt } from './support/wedge'
 
 /**
  * A corridor that ramps its floor without ramping its ceiling pinches shut.
@@ -32,18 +33,6 @@ const DIRECTIONS: Cardinal[] = [
 const VIAS = [Transition.Step, Transition.Ramp, Transition.Stairs]
 const RISES = [64, 128, -64]
 const LENGTH = 256
-
-/** Height of a wedge's sloped face at (x, y) — the same plane in both senses. */
-function wedgeSurfaceAt(s: Solid & { kind: 'wedge' }, x: number, y: number): number {
-  const [x0, y0, z0] = s.min
-  const [x1, y1, z1] = s.max
-  switch (s.rise) {
-    case Direction.East: return z0 + (z1 - z0) * (x - x0) / (x1 - x0)
-    case Direction.West: return z0 + (z1 - z0) * (x1 - x) / (x1 - x0)
-    case Direction.North: return z0 + (z1 - z0) * (y - y0) / (y1 - y0)
-    case Direction.South: return z0 + (z1 - z0) * (y1 - y) / (y1 - y0)
-  }
-}
 
 /** The disjoint z-intervals occupied by solid at column (x, y), in order. */
 function solidSpansAt(all: Solid[], x: number, y: number): Array<[number, number]> {
