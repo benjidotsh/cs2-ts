@@ -85,18 +85,22 @@ test('overlapping rooms are reported with both names', () => {
   } catch (e) {
     expect(e).toBeInstanceOf(SolverError)
     expect((e as SolverError).code).toBe('OVERLAP')
-    expect(JSON.stringify((e as SolverError).detail)).toContain('a')
+    expect((e as SolverError).detail.rooms).toEqual(['a', 'c'])
   }
 })
 
 test('a connection wider than the shared face is rejected', () => {
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [256, 256, 192] })
-  expect(() => {
+  try {
     a.room({ name: 'b', size: [256, 256, 192] },
       { direction: Direction.North, width: 512, length: 0 })
     solve(map.graph)
-  }).toThrow(/INSUFFICIENT_FACE_OVERLAP|face overlap/)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    expect((e as SolverError).code).toBe('INSUFFICIENT_FACE_OVERLAP')
+  }
 })
 
 test('a rise with no run is rejected', () => {
@@ -147,4 +151,71 @@ test('an unroutable cross connection is rejected', () => {
   } catch (e) {
     expect((e as SolverError).code).toBe('UNROUTABLE_CONNECTION')
   }
+})
+
+test('a cross connection separated but with too little overlap is INSUFFICIENT_FACE_OVERLAP, not unroutable', () => {
+  // a is at x[-256,256]; b sits north of it offset so it lands at x[192,704] -
+  // only 64 units of x overlap, less than the requested corridor width. The
+  // rooms *are* axis-separated (along y); only the overlap is too narrow, so
+  // this must not be misreported as "neither flush nor separated".
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  const b = a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 64, length: 512, offset: 448 })
+  map.connect(a, b, { width: 256 })
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    expect((e as SolverError).code).toBe('INSUFFICIENT_FACE_OVERLAP')
+    expect((e as SolverError).detail.overlap).toBe(64)
+  }
+})
+
+test('a flush cross connection with a height difference and a ramp is a rise conflict', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  const b = a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 0, rise: 64, via: Transition.Step })
+  map.connect(a, b, { width: 128 })
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect(e).toBeInstanceOf(SolverError)
+    expect((e as SolverError).code).toBe('RISE_CONFLICT')
+  }
+})
+
+test('a stepped cross connection with a 128-unit rise is a rise conflict', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  const b = a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 0, rise: 128, via: Transition.Step })
+  map.connect(a, b, { width: 128, via: Transition.Step })
+  try {
+    solve(map.graph)
+    throw new Error('expected solve to throw')
+  } catch (e) {
+    expect((e as SolverError).code).toBe('RISE_CONFLICT')
+  }
+})
+
+test('a stepped cross connection with a 64-unit rise is accepted', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  const b = a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 0, rise: 64, via: Transition.Step })
+  map.connect(a, b, { width: 128, via: Transition.Step })
+  expect(() => solve(map.graph)).not.toThrow()
+})
+
+test('a ramped cross connection with ample run for its rise is accepted', () => {
+  const map = new CS2Map('t')
+  const hub = map.room({ name: 'hub', size: [512, 512, 192] })
+  const raised = hub.room({ name: 'raised', size: [512, 512, 192] },
+    { direction: Direction.East, width: 128, length: 256, rise: 64 })
+  map.connect(hub, raised, { width: 128 })
+  expect(() => solve(map.graph)).not.toThrow()
 })

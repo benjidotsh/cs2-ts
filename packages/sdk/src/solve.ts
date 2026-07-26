@@ -92,6 +92,15 @@ export function solve(graph: MapGraph): Layout {
     const { axis, sign } = AXIS[c.direction]
     const other: 0 | 1 = axis === 0 ? 1 : 0
 
+    if (c.width <= 0) {
+      throw new SolverError(
+        'INSUFFICIENT_FACE_OVERLAP',
+        `connection from "${parent.name}" to "${child.name}" has non-positive ` +
+        `width ${c.width}`,
+        { parent: parent.name, child: child.name, width: c.width },
+      )
+    }
+
     if (c.rise !== 0 && c.length === 0 && c.via !== Transition.Step) {
       throw new SolverError(
         'SLOPE_WITHOUT_RUN',
@@ -130,18 +139,21 @@ export function solve(graph: MapGraph): Layout {
       bounds.min[other]!, bounds.max[other]!,
     )
     if (span.size < c.width) {
+      const overlap = Math.max(0, span.size)
       throw new SolverError(
         'INSUFFICIENT_FACE_OVERLAP',
         `connection from "${parent.name}" to "${child.name}" is ${c.width} wide ` +
-        `but the shared face overlap is only ${span.size}`,
-        { parent: parent.name, child: child.name, width: c.width, overlap: span.size },
+        `but the shared face only overlaps by ${overlap}`,
+        { parent: parent.name, child: child.name, width: c.width, overlap },
       )
     }
 
     if (c.length > 0) {
       const centre = (span.lo + span.hi) / 2
       const pMin: Vec3 = [0, 0, floorZ]
-      const pMax: Vec3 = [0, 0, Math.max(parent.floorZ, floorZ) + (c.height ?? child.size[2]!)]
+      const pMax: Vec3 = [0, 0, c.height != null
+        ? Math.max(parent.floorZ, floorZ) + c.height
+        : Math.min(parent.bounds.max[2]!, floorZ + child.size[2]!)]
       pMin[axis] = Math.min(parentFace, nearFace)
       pMax[axis] = Math.max(parentFace, nearFace)
       pMin[other] = centre - c.width / 2
@@ -158,7 +170,9 @@ export function solve(graph: MapGraph): Layout {
       // Flush rooms: a zero-thickness passage marks where to cut the openings.
       const centre = (span.lo + span.hi) / 2
       const pMin: Vec3 = [0, 0, Math.min(parent.floorZ, floorZ)]
-      const pMax: Vec3 = [0, 0, Math.max(parent.floorZ, floorZ) + (c.height ?? child.size[2]!)]
+      const pMax: Vec3 = [0, 0, c.height != null
+        ? Math.max(parent.floorZ, floorZ) + c.height
+        : Math.min(parent.bounds.max[2]!, floorZ + child.size[2]!)]
       pMin[axis] = parentFace; pMax[axis] = parentFace
       pMin[other] = centre - c.width / 2
       pMax[other] = centre + c.width / 2
@@ -176,6 +190,20 @@ export function solve(graph: MapGraph): Layout {
     const a = placed.get(edge.a)!
     const b = placed.get(edge.b)!
 
+    if (edge.width <= 0) {
+      throw new SolverError(
+        'INSUFFICIENT_FACE_OVERLAP',
+        `connection between "${a.name}" and "${b.name}" has non-positive width ` +
+        `${edge.width}`,
+        { a: a.name, b: b.name, width: edge.width },
+      )
+    }
+
+    // Track the best separated-but-too-narrow axis, so a real "the overlap is
+    // too small" case is reported as such rather than falling through to
+    // "unroutable" (which would claim the rooms aren't axis-separated at all).
+    let bestOverlap: { overlap: number } | null = null
+
     for (const axis of [0, 1] as const) {
       const other: 0 | 1 = axis === 0 ? 1 : 0
       const gapLo = Math.min(a.bounds.max[axis]!, b.bounds.max[axis]!)
@@ -187,7 +215,33 @@ export function solve(graph: MapGraph): Layout {
         a.bounds.min[other]!, a.bounds.max[other]!,
         b.bounds.min[other]!, b.bounds.max[other]!,
       )
-      if (span.size < edge.width) continue
+      if (span.size < edge.width) {
+        // Only a genuine (positive) facing overlap that is merely too narrow
+        // counts as "insufficient" — a non-positive span means the rooms don't
+        // face each other on this axis at all, which is unroutable, not narrow.
+        if (span.size > 0 && (bestOverlap === null || span.size > bestOverlap.overlap)) {
+          bestOverlap = { overlap: span.size }
+        }
+        continue
+      }
+
+      const deltaZ = Math.abs(b.floorZ - a.floorZ)
+      if (deltaZ > 0) {
+        const run = gapHi - gapLo
+        const traversable = edge.via === Transition.Step
+          ? deltaZ <= 64                    // a player can jump 64 units; beyond that it is a wall
+          : run > 0 && deltaZ <= run        // ramps and stairs need run, and no steeper than 1:1
+        if (!traversable) {
+          throw new SolverError(
+            'RISE_CONFLICT',
+            `"${a.name}" and "${b.name}" differ in floor height by ${deltaZ} units, which ` +
+            `${edge.via === Transition.Step
+              ? 'is more than a player can step or jump'
+              : `cannot be traversed over ${run} units of run`}`,
+            { a: a.name, b: b.name, deltaZ, run, via: edge.via },
+          )
+        }
+      }
 
       const centre = (span.lo + span.hi) / 2
       const loZ = Math.min(a.floorZ, b.floorZ)
@@ -208,6 +262,16 @@ export function solve(graph: MapGraph): Layout {
         fromZ: a.floorZ, toZ: b.floorZ, via: edge.via,
       })
       return
+    }
+
+    if (bestOverlap !== null) {
+      const overlap = Math.max(0, bestOverlap.overlap)
+      throw new SolverError(
+        'INSUFFICIENT_FACE_OVERLAP',
+        `connection between "${a.name}" and "${b.name}" is ${edge.width} wide but the ` +
+        `shared face only overlaps by ${overlap}`,
+        { a: a.name, b: b.name, width: edge.width, overlap },
+      )
     }
 
     throw new SolverError(
