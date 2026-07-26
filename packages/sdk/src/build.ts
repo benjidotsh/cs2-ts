@@ -68,7 +68,11 @@ export function boilerplateEntities(layout: Layout): VmapEntity[] {
       // sky_csgo_cloudy01 is one CS2 actually ships. (worldspawn's own
       // "skyname" keyvalue elsewhere is a separate, inert Source 1 legacy
       // key that CS2 ignores — left alone.)
-      properties: { skyname: 'materials/skybox/sky_csgo_cloudy01.vmat', enabled: true },
+      //
+      // No `enabled` key: env_sky has none. Its base classes are Targetname,
+      // Parentname and EnableDisable, and EnableDisable's toggle is
+      // `StartDisabled` (core/base.fgd:236), whose default is already 0.
+      properties: { skyname: 'materials/skybox/sky_csgo_cloudy01.vmat' },
     },
     {
       classname: 'info_map_parameters',

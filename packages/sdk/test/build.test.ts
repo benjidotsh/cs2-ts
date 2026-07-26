@@ -1,7 +1,8 @@
 import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
-import { buildVmap } from '../src/build'
-import { Direction, Team } from '../src/types'
+import { boilerplateEntities, buildVmap } from '../src/build'
+import { solve } from '../src/solve'
+import { Bombsite, Direction, Team } from '../src/types'
 
 function example() {
   const map = new CS2Map('de_example')
@@ -22,6 +23,37 @@ test('a built map contains geometry, spawns and lighting boilerplate', () => {
   expect(text).toContain('"classname" "string" "env_sky"')
   expect(text).toContain('"classname" "string" "info_map_parameters"')
   expect(text).toContain('materials/tools/toolslightmapres.vmat')
+})
+
+test('a defuse map ships the brush entities the game mode needs', () => {
+  const map = new CS2Map('de_brushes')
+  const t = map.room({ name: 'tSpawn', size: [1024, 768, 192] })
+  const site = t.room({ name: 'aSite', size: [1024, 1024, 256] },
+    { direction: Direction.North, width: 256, length: 384 })
+  t.spawns(Team.T, { count: 5 })
+  site.bombsite(Bombsite.A)
+  const text = buildVmap(map)
+
+  expect(text).toContain('"classname" "string" "func_bomb_target"')
+  expect(text).toContain('"classname" "string" "func_buyzone"')
+  expect(text).toContain('"bomb_site_designation" "string" "0"')
+  // The whole point: both are @SolidClass, so each is a CMapEntity with a
+  // child CMapMesh. Two brush entities, so two trigger-material meshes.
+  expect(text.split('materials/tools/toolstrigger.vmat')).toHaveLength(3)
+  // Nothing anywhere may carry the invented bounds keys the point-entity
+  // version used to fake a volume with.
+  expect(text).not.toContain('"mins.')
+  expect(text).not.toContain('"maxs.')
+  expect(text).not.toContain('"bomb_site" "string"')
+})
+
+test('the injected boilerplate emits no keyvalue the FGD does not declare', () => {
+  // env_sky's only toggle is StartDisabled, inherited from EnableDisable
+  // (core/base.fgd:236). An `enabled` key on it is silently ignored — the same
+  // class of mistake as the bomb site's invented `bomb_site`/`mins.*`.
+  const sky = boilerplateEntities(solve(example().graph))
+    .find((e) => e.classname === 'env_sky')!
+  expect(Object.keys(sky.properties)).toEqual(['skyname'])
 })
 
 test('builds are byte-stable', () => {

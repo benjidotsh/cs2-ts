@@ -145,6 +145,16 @@ the site.
 Note that `connector → aSite` isn't authored anywhere in the module — its position,
 width and ramp are entirely derived from where `connector` and `aSite` ended up.
 
+**What you don't have to author.** A defuse map needs more than rooms and spawns
+before CS2 will let anyone join it, so the ceremony is injected rather than asked for:
+a sun, a sky and `info_map_parameters`, and a `func_buyzone` over every room that has
+spawns, carrying that room's team. `func_bomb_target` and `func_buyzone` are
+`@SolidClass` entities — their volume *is* a brush, not a pair of keyvalues — so each
+is emitted as a brush entity with a `materials/tools/toolstrigger.vmat` volume, exactly
+as Valve's own `template_defuse.vmap` does it. A bomb site with no brush is not a bomb
+site, and a map without one is not a defuse map: the game mode never initialises and
+every team reads as full.
+
 **`facing`.** `Placement.facing` (used above as `Direction.North`) accepts either a
 `Direction` member or a literal yaw in degrees. Since `Direction` members are strings,
 there's no ambiguity: any `number` — `5`, `-90`, `3.5` — is taken as a literal yaw, and

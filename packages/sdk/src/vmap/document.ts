@@ -9,6 +9,15 @@ export interface VmapEntity {
   origin: Vec3
   angles: Vec3
   properties: Record<string, string | number | boolean>
+  /**
+   * Brush entities — anything declared `@SolidClass` in the FGD, such as
+   * func_bomb_target or func_buyzone — get their volume from geometry, not
+   * from keyvalues. These become `CMapMesh` children of the entity rather
+   * than world geometry, exactly as Hammer writes them. Vertex positions
+   * stay in world space (the entity's own origin is not applied to its
+   * children), so no coordinates need rebasing.
+   */
+  solids?: Solid[]
 }
 
 export interface VmapInput {
@@ -177,11 +186,12 @@ function entityNode(
   guid: () => string,
   nodeId: number,
   entity: VmapEntity,
+  children: DmxElement[],
 ): DmxElement {
   return element('CMapEntity', guid(), [
     ['nodeID', int(nodeId)],
     ['referenceID', { kind: 'uint64', value: '0x0' }],
-    ['children', { kind: 'element_array', value: [] }],
+    ['children', { kind: 'element_array', value: children }],
     ['variableTargetKeys', { kind: 'string_array', value: [] }],
     ['variableNames', { kind: 'string_array', value: [] }],
     ['relayPlugData', elem(emptyPlugList(guid))],
@@ -204,7 +214,11 @@ export function serializeVmap(input: VmapInput): string {
 
   const children: DmxElement[] = []
   for (const solid of input.solids) children.push(meshNode(guid, ++nodeId, solid))
-  for (const entity of input.entities) children.push(entityNode(guid, ++nodeId, entity))
+  for (const entity of input.entities) {
+    // Hammer numbers a brush entity's meshes ahead of the entity itself.
+    const meshes = (entity.solids ?? []).map((s) => meshNode(guid, ++nodeId, s))
+    children.push(entityNode(guid, ++nodeId, entity, meshes))
+  }
 
   const world = element('CMapWorld', guid(), [
     ['nodeID', int(1)],

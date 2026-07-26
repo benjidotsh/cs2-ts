@@ -3,6 +3,8 @@ export const MATERIALS = {
   wall: 'materials/dev/reflectivity_30.vmat',
   ceiling: 'materials/dev/reflectivity_30.vmat',
   lightmapVolume: 'materials/tools/toolslightmapres.vmat',
+  /** The brush material Valve's own templates give bomb targets and buy zones. */
+  trigger: 'materials/tools/toolstrigger.vmat',
 } as const
 
 export const WALL_THICKNESS = 16

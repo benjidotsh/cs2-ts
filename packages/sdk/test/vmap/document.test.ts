@@ -34,6 +34,39 @@ test('emits a well-formed vmap document', () => {
   expect(text).toContain('"enabled" "string" "1"')
 })
 
+test('an entity carrying solids emits them as child meshes, not world geometry', () => {
+  const text = serializeVmap({
+    name: 'brush_entity',
+    solids: [BOX],
+    entities: [{
+      classname: 'func_bomb_target',
+      origin: [0, 0, 64],
+      angles: [0, 0, 0],
+      properties: { bomb_site_designation: '0' },
+      solids: [{
+        kind: 'box',
+        min: [-128, -128, 0],
+        max: [128, 128, 128],
+        material: 'materials/tools/toolstrigger.vmat',
+      }],
+    }],
+  })
+
+  // Everything from the entity's opening brace up to its classname — the
+  // children array is serialized before entity_properties, so a child mesh
+  // shows up in this window and a sibling world mesh does not.
+  const start = text.indexOf('"CMapEntity"')
+  const head = text.slice(start, text.indexOf('"classname" "string" "func_bomb_target"'))
+  expect(head).toContain('"CMapMesh"')
+  expect(head).toContain('materials/tools/toolstrigger.vmat')
+
+  // ...and the trigger brush must not also have been emitted as world geometry.
+  expect(text.split('materials/tools/toolstrigger.vmat')).toHaveLength(2)
+  // Node IDs stay unique across world meshes, child meshes and entities.
+  const ids = [...text.matchAll(/"nodeID" "int" "(\d+)"/g)].map((m) => m[1]!)
+  expect(new Set(ids).size).toBe(ids.length)
+})
+
 test('matches the committed golden file', async () => {
   const golden = await Bun.file(
     new URL('../fixtures/one-box.vmap', import.meta.url),

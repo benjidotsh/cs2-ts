@@ -1,10 +1,11 @@
+import { MATERIALS } from './defaults'
 import { AuthoringError } from './errors'
 import type { MapGraph, RoomNode } from './map'
 import type { Layout, PlacedRoom } from './solve'
 import type { VmapEntity } from './vmap/document'
 import {
   Align, Bombsite, Surface, Team, directionYaw,
-  type Placement, type Vec3,
+  type BoxSolid, type Placement, type Vec3,
 } from './types'
 
 /** -1 = min edge, 0 = centre, +1 = max edge, in (horizontal, vertical) order. */
@@ -87,9 +88,30 @@ const SPAWN_CLASS: Record<Team, string> = {
   [Team.CT]: 'info_player_counterterrorist',
 }
 
-const SITE_NAME: Record<Bombsite, string> = {
-  [Bombsite.A]: 'A',
-  [Bombsite.B]: 'B',
+/**
+ * csgo.fgd: `bomb_site_designation(choices) : "Bomb Site" : 0 = [0:"A" 1:"B"]`.
+ * The letter is only the editor's label for the choice; the keyvalue itself is
+ * the index. (There is no `bomb_site` key on the class at all.)
+ */
+const SITE_DESIGNATION: Record<Bombsite, string> = {
+  [Bombsite.A]: '0',
+  [Bombsite.B]: '1',
+}
+
+/** csgo.fgd's TeamNum base class: 2 = Terrorist, 3 = Counter-Terrorist. */
+const TEAM_NUM: Record<Team, number> = {
+  [Team.T]: 2,
+  [Team.CT]: 3,
+}
+
+/** A world-space box, as a brush entity's volume is always given. */
+function triggerBox(min: Vec3, max: Vec3): BoxSolid {
+  return { kind: 'box', min, max, material: MATERIALS.trigger }
+}
+
+/** Valve puts a brush entity's origin at the centre of its own brush. */
+function centre(min: Vec3, max: Vec3): Vec3 {
+  return [(min[0] + max[0]) / 2, (min[1] + max[1]) / 2, (min[2] + max[2]) / 2]
 }
 
 export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
@@ -166,16 +188,46 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
       room.bounds.max[1]! - room.bounds.min[1]!,
       128,
     ]
+    // The placement anchors the footprint's centre and the volume's base; the
+    // volume rises from there. Unchanged from when this was a point entity
+    // with mins/maxs — only where the bounds live has changed.
+    const min: Vec3 = [origin[0] - size[0] / 2, origin[1] - size[1] / 2, origin[2]]
+    const max: Vec3 = [origin[0] + size[0] / 2, origin[1] + size[1] / 2, origin[2] + size[2]]
     out.push({
       classname: 'func_bomb_target',
-      origin,
+      origin: centre(min, max),
       angles: [0, 0, 0],
+      // The full keyvalue set Hammer writes for this class, matching
+      // template_defuse.vmap: the Parentname base's keys, then the class's own.
       properties: {
-        bomb_site: SITE_NAME[req.site],
+        parentname: '',
+        parentAttachmentName: '',
+        'local.origin': '',
+        'local.angles': '',
+        'local.scales': '',
+        useLocalOffset: 0,
         heistbomb: 0,
-        'mins.x': -size[0] / 2, 'mins.y': -size[1] / 2, 'mins.z': 0,
-        'maxs.x': size[0] / 2, 'maxs.y': size[1] / 2, 'maxs.z': size[2],
+        bomb_mount_target: '',
+        bomb_site_designation: SITE_DESIGNATION[req.site],
       },
+      solids: [triggerBox(min, max)],
+    })
+  }
+
+  // A buy zone is injected rather than authored: it is map-level ceremony in
+  // the same class as the sun and the sky, and a spawn room without one is a
+  // spawn room whose team can never arm itself. One zone per room, covering
+  // the room's whole interior, for the team that spawns there.
+  const teams = [...new Set(node.spawns.map((s) => s.team))]
+  for (const team of teams) {
+    const min: Vec3 = [room.bounds.min[0]!, room.bounds.min[1]!, room.floorZ]
+    const max: Vec3 = [room.bounds.max[0]!, room.bounds.max[1]!, room.bounds.max[2]!]
+    out.push({
+      classname: 'func_buyzone',
+      origin: centre(min, max),
+      angles: [0, 0, 0],
+      properties: { TeamNum: TEAM_NUM[team] },
+      solids: [triggerBox(min, max)],
     })
   }
 

@@ -125,20 +125,26 @@ test('a non-positive spawn count is an error, not a silent no-op', () => {
   expect(() => layoutEntities(solve(map2.graph), map2.graph)).toThrow(AuthoringError)
 })
 
-test('a bombsite defaults to the room footprint', () => {
+test('a bombsite is a brush entity whose volume defaults to the room footprint', () => {
+  // func_bomb_target is @SolidClass in csgo.fgd (line 1295): the bomb site's
+  // volume IS its brush. A point entity with invented mins/maxs keyvalues has
+  // no volume at all, which leaves the map an invalid defuse map — the game
+  // mode never initialises and every team reads as full.
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   a.bombsite(Bombsite.A)
   const ents = layoutEntities(solve(map.graph), map.graph)
   const site = ents.find((e) => e.classname === 'func_bomb_target')!
-  expect(site.properties.bomb_site).toBe('A')
-  expect(site.origin).toEqual([0, 0, 0])
-  expect(site.properties['mins.x']).toBe(-256)
-  expect(site.properties['mins.y']).toBe(-256)
-  expect(site.properties['mins.z']).toBe(0)
-  expect(site.properties['maxs.x']).toBe(256)
-  expect(site.properties['maxs.y']).toBe(256)
-  expect(site.properties['maxs.z']).toBe(128)
+
+  expect(site.solids).toHaveLength(1)
+  expect(site.solids![0]).toEqual({
+    kind: 'box',
+    min: [-256, -256, 0],
+    max: [256, 256, 128],
+    material: 'materials/tools/toolstrigger.vmat',
+  })
+  // Valve puts the entity origin at the centre of its own brush.
+  expect(site.origin).toEqual([0, 0, 64])
 })
 
 test('a bombsite honors an explicit size', () => {
@@ -147,11 +153,85 @@ test('a bombsite honors an explicit size', () => {
   a.bombsite(Bombsite.B, { size: [100, 200, 64] })
   const ents = layoutEntities(solve(map.graph), map.graph)
   const site = ents.find((e) => e.classname === 'func_bomb_target')!
-  expect(site.properties.bomb_site).toBe('B')
-  expect(site.properties['mins.x']).toBe(-50)
-  expect(site.properties['mins.y']).toBe(-100)
-  expect(site.properties['mins.z']).toBe(0)
-  expect(site.properties['maxs.x']).toBe(50)
-  expect(site.properties['maxs.y']).toBe(100)
-  expect(site.properties['maxs.z']).toBe(64)
+
+  expect(site.solids![0]!.min).toEqual([-50, -100, 0])
+  expect(site.solids![0]!.max).toEqual([50, 100, 64])
+  expect(site.origin).toEqual([0, 0, 32])
+})
+
+test('the bomb site designation is the FGD choice index, not a letter', () => {
+  // csgo.fgd: bomb_site_designation(choices) : "Bomb Site" : 0 = [0:"A" 1:"B"].
+  // There is no `bomb_site` keyvalue on the class at all.
+  const designation = (site: Bombsite) => {
+    const map = new CS2Map(`t_${site}`)
+    const a = map.room({ name: 'a', size: [512, 512, 192] })
+    a.bombsite(site)
+    const ents = layoutEntities(solve(map.graph), map.graph)
+    return ents.find((e) => e.classname === 'func_bomb_target')!.properties
+  }
+  expect(designation(Bombsite.A).bomb_site_designation).toBe('0')
+  expect(designation(Bombsite.B).bomb_site_designation).toBe('1')
+  expect(designation(Bombsite.A).bomb_site).toBeUndefined()
+})
+
+test('no entity carries invented bounds keyvalues', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.bombsite(Bombsite.A)
+  a.spawns(Team.T, { count: 4 })
+  for (const entity of layoutEntities(solve(map.graph), map.graph)) {
+    for (const key of Object.keys(entity.properties)) {
+      expect(key).not.toStartWith('mins.')
+      expect(key).not.toStartWith('maxs.')
+    }
+  }
+})
+
+test('a room with spawns gets a buy zone brush for that team', () => {
+  // func_buyzone is @SolidClass too (csgo.fgd:1265), with TeamNum from the
+  // TeamNum base class: 2 = Terrorist, 3 = Counter-Terrorist (csgo.fgd:218).
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.spawns(Team.CT, { count: 4 })
+  const ents = layoutEntities(solve(map.graph), map.graph)
+  const zones = ents.filter((e) => e.classname === 'func_buyzone')
+
+  expect(zones).toHaveLength(1)
+  expect(zones[0]!.properties.TeamNum).toBe(3)
+  expect(zones[0]!.solids![0]).toEqual({
+    kind: 'box',
+    min: [-256, -256, 0],
+    max: [256, 256, 192],
+    material: 'materials/tools/toolstrigger.vmat',
+  })
+})
+
+test('the buy zone team number follows the spawning team', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.spawns(Team.T, { count: 4 })
+  const b = a.room({ name: 'b', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 256 })
+  b.spawns(Team.CT, { count: 4 })
+  const ents = layoutEntities(solve(map.graph), map.graph)
+  const zones = ents.filter((e) => e.classname === 'func_buyzone')
+
+  expect(zones.map((z) => z.properties.TeamNum).sort()).toEqual([2, 3])
+})
+
+test('a room with no spawns gets no buy zone', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.bombsite(Bombsite.A)
+  const ents = layoutEntities(solve(map.graph), map.graph)
+  expect(ents.filter((e) => e.classname === 'func_buyzone')).toHaveLength(0)
+})
+
+test('one buy zone per room however many spawn groups that room has', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  a.spawns(Team.T, { count: 2, at: [-128, 0, 0] })
+  a.spawns(Team.T, { count: 2, at: [128, 0, 0] })
+  const ents = layoutEntities(solve(map.graph), map.graph)
+  expect(ents.filter((e) => e.classname === 'func_buyzone')).toHaveLength(1)
 })
