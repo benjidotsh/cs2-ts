@@ -199,7 +199,7 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
 // hole rather than merely untidy geometry. Asserting the exact set of
 // overlaps, not just a total, keeps this from quietly absorbing a new one.
 test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
-  'the only overlapping solids are the corridor/room wall corners, facing %i',
+  'the only overlapping solids are the corridor/room wall corners, facing %s',
   (direction) => {
     const WALL = 16
     const CORRIDOR_HEIGHT = 192

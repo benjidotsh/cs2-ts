@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { layoutEntities, resolvePlacement } from '../src/entities'
-import { Align, Bombsite, Direction, Surface, Team } from '../src/types'
+import { Align, Bombsite, Direction, Surface, Team, directionYaw } from '../src/types'
 import { AuthoringError } from '../src/errors'
 
 const room = {
@@ -38,10 +38,20 @@ test('facing accepts an enum or a raw yaw', () => {
   expect(resolvePlacement(room, { facing: 33 }).yaw).toBe(33)
 })
 
-test('facing values outside the 0-7 integer range pass through as degrees', () => {
+test('facing values that used to collide with the old 0-7 enum range now pass through as literal degrees', () => {
+  // Previously ambiguous under the numeric-enum encoding: `5` used to mean
+  // `Direction.SouthWest`, `-90` fell into the same integer check and (once)
+  // returned `undefined`, and `0` used to mean `Direction.North`. String
+  // enums remove the ambiguity outright: any `number` is always a literal yaw.
+  expect(resolvePlacement(room, { facing: 5 }).yaw).toBe(5)
   expect(resolvePlacement(room, { facing: -90 }).yaw).toBe(-90)
+  expect(resolvePlacement(room, { facing: 0 }).yaw).toBe(0)
   expect(resolvePlacement(room, { facing: 3.5 }).yaw).toBe(3.5)
   expect(resolvePlacement(room, { facing: 359.9 }).yaw).toBe(359.9)
+})
+
+test.each(Object.values(Direction))('every Direction member resolves through directionYaw: %s', (direction) => {
+  expect(resolvePlacement(room, { facing: direction }).yaw).toBe(directionYaw(direction))
 })
 
 test('wall alignment respects facing-the-wall-from-inside handedness', () => {

@@ -115,14 +115,10 @@ connector → aSite   [1376, 1568]     [ 384,  896]  ramp 0 → 128 over 512, de
 Note that `connector → aSite` isn't authored anywhere in the module — its position,
 width and ramp are entirely derived from where `connector` and `aSite` ended up.
 
-**`facing` disambiguation.** `Placement.facing` (used above as `Direction.North`)
-accepts either a `Direction` member or a raw yaw in degrees, and picks between them by
-value: integers 0–7 are read as `Direction` enum members (`North`, `NorthEast`, `East`,
-... in 45° steps); anything else — negative, fractional, or 8 and up — is used as a
-literal yaw. One consequence: `facing: 5` means `Direction.SouthWest` (enum member 5),
-not a 5° yaw. A yaw of exactly 5 degrees isn't expressible as a literal — the nearest
-values you can actually request are the enum's 45°-step directions or an integer yaw of
-8 or more.
+**`facing`.** `Placement.facing` (used above as `Direction.North`) accepts either a
+`Direction` member or a literal yaw in degrees. Since `Direction` members are strings,
+there's no ambiguity: any `number` — `5`, `-90`, `3.5` — is taken as a literal yaw, and
+any `Direction` member resolves through the same 45°-step table used internally.
 
 ## CLI
 
@@ -210,9 +206,6 @@ A few narrower constraints are worth knowing before you hit them:
   intermediate room.
 - A corridor's `length` must be either 0 (a flush doorway, walls touching directly) or
   at least 32 units. Anything shorter can't fit both rooms' walls and is rejected.
-- As noted under the example above, `Placement.facing` can't express every yaw
-  literally: values 0–7 are `Direction` enum members, so an angle like 5° has no
-  literal representation.
 - Geometry is emitted per room and per corridor with no global merge step, so junctions
   can carry duplicated, coplanar brush — where rooms of different sizes meet, where a
   corridor's side walls run past the walls of the rooms they join, and around openings

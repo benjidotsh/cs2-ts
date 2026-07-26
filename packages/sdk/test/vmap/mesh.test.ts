@@ -100,7 +100,7 @@ test('every half-edge is consistent with its twin, next and vertex', () => {
   }
 })
 
-test.each(CARDINALS)('wedge rising toward %i is closed and wound outward', (rise) => {
+test.each(CARDINALS)('wedge rising toward %s is closed and wound outward', (rise) => {
   // Deliberately non-cubic so an axis swap would surface.
   const poly = wedgePolyhedron([0, 0, 0], [64, 96, 32], rise)
   const m = buildMesh(poly, 'm')

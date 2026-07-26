@@ -3,22 +3,34 @@ export type Vec3 = [x: number, y: number, z: number]
 export type Vec4 = [x: number, y: number, z: number, w: number]
 
 export enum Direction {
-  North, NorthEast, East, SouthEast, South, SouthWest, West, NorthWest,
+  North = 'north',
+  NorthEast = 'north-east',
+  East = 'east',
+  SouthEast = 'south-east',
+  South = 'south',
+  SouthWest = 'south-west',
+  West = 'west',
+  NorthWest = 'north-west',
 }
 
 /** Only cardinals may drive placement or connections. Diagonals are facing-only. */
 export type Cardinal =
   | Direction.North | Direction.East | Direction.South | Direction.West
 
-export enum Surface { Floor, Ceiling, North, East, South, West }
-
-export enum Align {
-  Center, Top, Bottom, Left, Right, TopLeft, TopRight, BottomLeft, BottomRight,
+export enum Surface {
+  Floor = 'floor', Ceiling = 'ceiling',
+  North = 'north', East = 'east', South = 'south', West = 'west',
 }
 
-export enum Transition { Step, Ramp, Stairs }
-export enum Team { T, CT }
-export enum Bombsite { A, B }
+export enum Align {
+  Center = 'center', Top = 'top', Bottom = 'bottom', Left = 'left', Right = 'right',
+  TopLeft = 'top-left', TopRight = 'top-right',
+  BottomLeft = 'bottom-left', BottomRight = 'bottom-right',
+}
+
+export enum Transition { Step = 'step', Ramp = 'ramp', Stairs = 'stairs' }
+export enum Team { T = 'T', CT = 'CT' }
+export enum Bombsite { A = 'A', B = 'B' }
 
 export interface Placement {
   surface?: Surface

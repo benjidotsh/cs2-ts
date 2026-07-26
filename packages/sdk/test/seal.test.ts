@@ -92,12 +92,12 @@ function checkAccepted(map: CS2Map): string | null | 'rejected' {
 }
 
 const label = (c: Case) =>
-  `${Direction[c.direction]} ${Transition[c.via]} rise=${c.rise} ` +
+  `${c.direction} ${c.via} rise=${c.rise} ` +
   `length=${c.length} width=${c.width}`
 
 for (const direction of DIRECTIONS) {
   for (const via of VIAS) {
-    test(`no layout leaks: ${Direction[direction]} via ${Transition[via]}`, () => {
+    test(`no layout leaks: ${direction} via ${via}`, () => {
       const failures: string[] = []
       let accepted = 0
 

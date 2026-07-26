@@ -4,7 +4,7 @@ import type { Layout, PlacedRoom } from './solve'
 import type { VmapEntity } from './vmap/document'
 import {
   Align, Bombsite, Surface, Team, directionYaw,
-  type Direction, type Placement, type Vec3,
+  type Placement, type Vec3,
 } from './types'
 
 /** -1 = min edge, 0 = centre, +1 = max edge, in (horizontal, vertical) order. */
@@ -71,14 +71,13 @@ export function resolvePlacement(
   const at = placement.at ?? [0, 0, 0]
   origin = [origin[0] + at[0], origin[1] + at[1], origin[2] + at[2]]
 
-  // Direction members are the integers 0-7; anything else (including negative
-  // numbers, fractions, or values above 7) is a literal yaw in degrees.
+  // Direction members are strings; a number is always a literal yaw in degrees.
   const facing = placement.facing
   const yaw = facing === undefined
     ? 0
-    : Number.isInteger(facing) && facing >= 0 && facing <= 7
-      ? directionYaw(facing as Direction)
-      : facing
+    : typeof facing === 'number'
+      ? facing
+      : directionYaw(facing)
 
   return { origin, yaw }
 }

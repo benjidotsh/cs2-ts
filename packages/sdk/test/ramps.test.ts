@@ -33,7 +33,7 @@ test('a ramp emits a wedge rising toward the higher room', () => {
 // which physical end `from` occupies), North and East happen to come out
 // right by coincidence — only South and West expose the sign error.
 test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
-  'a ramp emits a wedge rising toward the higher room, direction %i',
+  'a ramp emits a wedge rising toward the higher room, direction %s',
   (direction) => {
     const map = new CS2Map('t')
     const a = map.room({ name: 'a', size: [512, 512, 192] })

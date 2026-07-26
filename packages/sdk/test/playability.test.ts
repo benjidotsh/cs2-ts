@@ -182,7 +182,7 @@ test('every ramp or stair climbs monotonically from one floor to the other with 
 // never places a room at the axis-max end. Covering all four cardinals here,
 // on a small synthetic map, is what actually exercises the failing quadrant.
 test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
-  'a ramp climbs monotonically to the upper floor, facing %i',
+  'a ramp climbs monotonically to the upper floor, facing %s',
   (direction) => {
     const map = new CS2Map('t')
     const a = map.room({ name: 'a', size: [512, 512, 192] })
