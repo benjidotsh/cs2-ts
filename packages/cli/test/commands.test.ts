@@ -40,7 +40,35 @@ test('rejects a module with no default export', async () => {
   const dir = await mkdtemp(join(tmpdir(), 'cs2ts-map-'))
   const file = join(dir, 'bad.ts')
   await Bun.write(file, 'export const x = 1')
-  await expect(loadMap(file)).rejects.toThrow(/default export/)
+  await expect(loadMap(file)).rejects.toThrow(`${file} has no default export. Add: export default map`)
+})
+
+test('rejects a missing map file', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'cs2ts-map-'))
+  const file = join(dir, 'nope.ts')
+  await expect(loadMap(file)).rejects.toThrow(`no such map file: ${file}`)
+})
+
+test('rejects a map file whose @cs2-ts/sdk import cannot be resolved', async () => {
+  // Deliberately no withSdkResolvable() here — this reproduces the same
+  // bare-specifier-resolution failure the "loads a map module" test above
+  // needed the node_modules symlink to avoid, so loadMap must translate it.
+  const dir = await mkdtemp(join(tmpdir(), 'cs2ts-map-'))
+  const file = join(dir, 'map.ts')
+  await Bun.write(file, MAP_SOURCE)
+  await expect(loadMap(file)).rejects.toThrow(
+    `${file} imports @cs2-ts/sdk, but it could not be resolved from ${dir}.`,
+  )
+  await expect(loadMap(file)).rejects.toThrow('bun add @cs2-ts/sdk')
+})
+
+test('rejects a module whose default export is some other object', async () => {
+  const dir = await mkdtemp(join(tmpdir(), 'cs2ts-map-'))
+  const file = join(dir, 'wrong.ts')
+  await Bun.write(file, 'export default { hello: "world" }')
+  await expect(loadMap(file)).rejects.toThrow(
+    `${file}'s default export is a Object, not a CS2Map. Export the value returned by new CS2Map(...).`,
+  )
 })
 
 test('init creates both addon directories and addoninfo.txt', async () => {

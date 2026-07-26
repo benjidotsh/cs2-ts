@@ -9,6 +9,7 @@ const program = new Command()
   .version('0.1.0')
 
 program.command('init')
+  .description('scaffold a Counter-Strike 2 addon in the game install')
   .argument('<addon>', 'addon name to create in the CS2 install')
   .option('--cs2-dir <path>', 'path to the CS2 install')
   .action(async (addon: string, opts: { cs2Dir?: string }) => {
@@ -19,6 +20,7 @@ program.command('init')
   })
 
 program.command('emit')
+  .description('write a .vmap without compiling it')
   .argument('<file>', 'map definition module')
   .option('--out <path>', 'write the .vmap here instead of into an addon')
   .option('--addon <name>', 'addon to write into')
