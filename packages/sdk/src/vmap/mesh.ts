@@ -110,10 +110,13 @@ export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
     faceEdgeIndices.push(loop[loop.length - 1]!)
   })
 
+  // vertexEdgeIndices[v] must be a half-edge whose ORIGIN is v (an outgoing
+  // edge), not one whose destination is v. origin(h) === destination[h ^ 1],
+  // so scanning destinations and recording the twin gives an outgoing edge.
   const vertexEdgeIndices = new Array<number>(positions.length).fill(-1)
   for (let h = 0; h < count; h++) {
     const v = destination[h]!
-    if (vertexEdgeIndices[v] === -1) vertexEdgeIndices[v] = h
+    if (vertexEdgeIndices[v] === -1) vertexEdgeIndices[v] = h ^ 1
   }
 
   const texcoords = new Array<Vec2>(count)

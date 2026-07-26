@@ -71,14 +71,14 @@
 					"name" "string" "meshData"
 					"vertexEdgeIndices" "int_array" 
 					[
-						"1",
-						"4",
-						"2",
 						"0",
-						"9",
+						"5",
+						"3",
+						"1",
 						"8",
-						"10",
-						"12"
+						"9",
+						"11",
+						"13"
 					]
 					"vertexDataIndices" "int_array" 
 					[

@@ -50,7 +50,7 @@ test('box half-edge topology matches the derived reference', () => {
     1, 4, 1, 5, 2, 3, 2, 5, 3, 4, 4, 5,
   ])
   expect(m.faceEdgeIndices).toEqual([6, 14, 18, 17, 21, 23])
-  expect(m.vertexEdgeIndices).toEqual([1, 4, 2, 0, 9, 8, 10, 12])
+  expect(m.vertexEdgeIndices).toEqual([0, 5, 3, 1, 8, 9, 11, 13])
   expect(m.edgeDataIndices).toEqual([
     0, 0, 1, 1, 2, 2, 3, 3, 4, 4, 5, 5,
     6, 6, 7, 7, 8, 8, 9, 9, 10, 10, 11, 11,
@@ -92,7 +92,10 @@ test('every half-edge is consistent with its twin, next and vertex', () => {
       expect(m.edgeVertexIndices[prev]).toBe(m.edgeVertexIndices[m.edgeOppositeIndices[h]!]!)
     }
     for (let v = 0; v < m.vertexEdgeIndices.length; v++) {
-      expect(m.edgeVertexIndices[m.vertexEdgeIndices[v]!]).toBe(v)
+      // vertexEdgeIndices[v] is an OUTGOING half-edge: its origin, i.e. the
+      // destination of its twin, is v.
+      const h = m.vertexEdgeIndices[v]!
+      expect(m.edgeVertexIndices[m.edgeOppositeIndices[h]!]).toBe(v)
     }
   }
 })
