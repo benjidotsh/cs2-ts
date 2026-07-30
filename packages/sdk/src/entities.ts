@@ -165,11 +165,14 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
     // hull in the wall — the same "stuck in geometry" rejection the floor
     // clearance avoids, reached sideways. The grid is measured with a hull's
     // half-width around it, and the standing height above it.
+    // `spawnZ <= floorZ` matters as much as the ceiling: a placement's `at`
+    // can carry the grid down through the floor slab, or clean out of the map
+    // below it, and neither the x/y bounds nor the ceiling test can see that.
     const r = PLAYER_HULL_RADIUS
     if (
       gridMinX - r < room.bounds.min[0]! || gridMaxX + r > room.bounds.max[0]! ||
       gridMinY - r < room.bounds.min[1]! || gridMaxY + r > room.bounds.max[1]! ||
-      spawnZ + PLAYER_HULL_HEIGHT > room.bounds.max[2]!
+      spawnZ <= room.floorZ || spawnZ + PLAYER_HULL_HEIGHT > room.bounds.max[2]!
     ) {
       throw new AuthoringError(
         'SPAWN_GRID_TOO_LARGE',

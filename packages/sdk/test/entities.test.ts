@@ -161,6 +161,24 @@ test('the same grid fits once the room can take the players standing in it', () 
   expect(() => layoutEntities(solve(map.graph), map.graph)).not.toThrow()
 })
 
+test('a placement that pushes spawns into or under the floor is an error', () => {
+  // The x/y bounds and the ceiling test cannot see downwards: `at` can carry
+  // the grid into the floor slab, or clean out of the map below it, and the
+  // spawn is then stuck in geometry or in the void.
+  for (const z of [-16, -64, -1000]) {
+    const map = new CS2Map('t')
+    const a = map.room({ name: 'a', size: [512, 512, 192] })
+    a.spawns(Team.T, { count: 1, at: [0, 0, z] })
+    expect(() => layoutEntities(solve(map.graph), map.graph)).toThrow(AuthoringError)
+  }
+
+  // Lifting them is fine, so long as the standing hull still clears the roof.
+  const ok = new CS2Map('t2')
+  const b = ok.room({ name: 'b', size: [512, 512, 192] })
+  b.spawns(Team.T, { count: 1, at: [0, 0, 64] })
+  expect(() => layoutEntities(solve(ok.graph), ok.graph)).not.toThrow()
+})
+
 test('a room too short for a standing player is an error', () => {
   // 16 units of floor clearance plus a 72-unit hull needs 88 of headroom.
   const map = new CS2Map('t')
