@@ -1,5 +1,6 @@
 import { access, readFile } from 'node:fs/promises'
 import { join } from 'node:path'
+import { addonPaths } from './addon'
 import { toWindowsPath } from './paths'
 
 export class PreflightError extends Error {
@@ -115,10 +116,10 @@ export async function preflight(install: Cs2Install, addon?: string): Promise<vo
   }
 
   if (addon) {
-    const contentDir = join(install.root, 'content', 'csgo_addons', addon)
-    if (!(await exists(contentDir))) {
+    const { content } = addonPaths(install, addon)
+    if (!(await exists(content))) {
       throw new PreflightError(
-        `addon "${addon}" does not exist at ${contentDir}.\n` +
+        `addon "${addon}" does not exist at ${content}.\n` +
         `Create it with: cs2ts init ${addon}`,
       )
     }

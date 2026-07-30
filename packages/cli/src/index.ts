@@ -2,7 +2,7 @@
 import { basename } from 'node:path'
 import { Command } from 'commander'
 import { findCs2Install, preflight } from './install'
-import { assertSafeName, emitMap, initAddon } from './commands'
+import { emitMap, initAddon } from './commands'
 import { compileMap, launchMap, type Preset } from './compile'
 import { toWindowsPath } from './paths'
 
@@ -31,7 +31,6 @@ program.command('emit')
   .action(async (file: string, opts: { out?: string; addon?: string; cs2Dir?: string }) => {
     let install
     if (opts.addon) {
-      assertSafeName('addon', opts.addon)
       install = await findCs2Install(opts.cs2Dir)
       await preflight(install, opts.addon)
     }
@@ -48,7 +47,6 @@ interface BuildOptions {
 
 /** Everything `preview` and `build` share: emit, then run the compiler. */
 async function buildAddonMap(file: string, preset: Preset, opts: BuildOptions) {
-  assertSafeName('addon', opts.addon)
   const install = await findCs2Install(opts.cs2Dir)
   await preflight(install, opts.addon)
 
