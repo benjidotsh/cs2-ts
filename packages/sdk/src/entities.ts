@@ -2,7 +2,7 @@ import {
   MATERIALS, PLAYER_HULL_HEIGHT, PLAYER_HULL_RADIUS, SPAWN_FLOOR_CLEARANCE,
   WALL_THICKNESS,
 } from './defaults'
-import { overlap1d } from './geometry'
+import { aabbsOverlap, overlap1d } from './geometry'
 import { AuthoringError } from './errors'
 import type { MapGraph, RoomNode } from './map'
 import type { Layout, PlacedRoom } from './solve'
@@ -128,7 +128,7 @@ function brushEntity(
 }
 
 /**
- * The floor a player can actually stand on, which is not the room's bounds.
+ * The wall brushes standing inside this room that are not its own.
  *
  * A room's wall band is emitted *outside* its own bounds, so on a face shared
  * flush with a neighbour it is that neighbour's band standing WALL_THICKNESS
@@ -136,42 +136,50 @@ function brushEntity(
  * that zone by design — so a spawn measured against the bounds alone can end
  * up half-buried in a wall nothing else objects to.
  */
-export function standableBounds(
+export function intrudingWalls(
   room: PlacedRoom, rooms: readonly PlacedRoom[],
-): Aabb {
-  const min: Vec3 = [...room.bounds.min]
-  const max: Vec3 = [...room.bounds.max]
+): Aabb[] {
+  const out: Aabb[] = []
 
   for (const other of rooms) {
     if (other.id === room.id) continue
-    // A neighbour only walls this room off where the two share height.
-    if (overlap1d(room.bounds.min[2]!, room.bounds.max[2]!,
-      other.bounds.min[2]!, other.bounds.max[2]!).size <= 0) continue
+    // A band only exists where the two rooms share height.
+    const z = overlap1d(room.bounds.min[2]!, room.bounds.max[2]!,
+      other.bounds.min[2]!, other.bounds.max[2]!)
+    if (z.size <= 0) continue
 
     for (const axis of [0, 1] as const) {
       // ...and meet along a face, rather than merely touching at a corner.
       const cross: 0 | 1 = axis === 0 ? 1 : 0
-      if (overlap1d(room.bounds.min[cross]!, room.bounds.max[cross]!,
-        other.bounds.min[cross]!, other.bounds.max[cross]!).size <= 0) continue
+      const span = overlap1d(room.bounds.min[cross]!, room.bounds.max[cross]!,
+        other.bounds.min[cross]!, other.bounds.max[cross]!)
+      if (span.size <= 0) continue
 
-      // The inset is off this room's own face, so every neighbour on a given
-      // side arrives at the same answer.
-      if (other.bounds.max[axis]! === room.bounds.min[axis]!) {
-        min[axis] = room.bounds.min[axis]! + WALL_THICKNESS
-      }
-      if (other.bounds.min[axis]! === room.bounds.max[axis]!) {
-        max[axis] = room.bounds.max[axis]! - WALL_THICKNESS
-      }
+      const lo = other.bounds.max[axis]! === room.bounds.min[axis]!
+        ? room.bounds.min[axis]!
+        : other.bounds.min[axis]! === room.bounds.max[axis]!
+          ? room.bounds.max[axis]! - WALL_THICKNESS
+          : null
+      if (lo === null) continue
+
+      // The band reaches only as far as the neighbour itself does — its own
+      // footprint across the face, and its own height. roomSolids emits it
+      // unpadded, so anything beyond that is this room's own clear floor.
+      const min: Vec3 = [0, 0, z.lo]
+      const max: Vec3 = [0, 0, z.hi]
+      min[axis] = lo; max[axis] = lo + WALL_THICKNESS
+      min[cross] = span.lo; max[cross] = span.hi
+      out.push({ min, max })
     }
   }
-  return { min, max }
+  return out
 }
 
 export function roomEntities(
   room: PlacedRoom,
   node: RoomNode,
-  /** From standableBounds: the room's floor less any flush neighbour's wall. */
-  standable: Aabb,
+  /** From intrudingWalls: flush neighbours' bands standing inside this room. */
+  walls: readonly Aabb[],
 ): VmapEntity[] {
   const out: VmapEntity[] = []
 
@@ -207,9 +215,7 @@ export function roomEntities(
     // or above its own ceiling, so that has to fail the same fit check.
     const spawnZ = origin[2] + SPAWN_FLOOR_CLEARANCE
 
-    // What has to fit is the player, not the origin, and it has to fit in the
-    // floor the room really has — `standable`, which is the bounds less any
-    // wall a flush neighbour stands inside them. An origin on a wall plane
+    // What has to fit is the player, not the origin: an origin on a wall plane
     // buries half a 32-wide hull in it, the same "stuck in geometry" rejection
     // the floor clearance avoids, reached sideways.
     //
@@ -217,18 +223,36 @@ export function roomEntities(
     // can carry the grid down through the floor slab, or clean out of the map
     // below it, and neither the x/y test nor the ceiling one can see that.
     const r = PLAYER_HULL_RADIUS
+    const hull: Aabb = {
+      min: [gridMinX - r, gridMinY - r, spawnZ],
+      max: [gridMaxX + r, gridMaxY + r, spawnZ + PLAYER_HULL_HEIGHT],
+    }
+
+    // Weighed against the neighbours' walls where they actually stand, rather
+    // than by shrinking the room a wall's width on any face one touches: a
+    // neighbour's band reaches only across its own footprint and its own
+    // height, so insetting the whole face refuses grids sitting nowhere near
+    // it. (A grid inside a doorway *opening* is still refused — the band has a
+    // hole there and no brush in it, but spawning in a doorway is not a case
+    // worth carrying the openings down here for.)
+    const inWall = walls.some((w) => aabbsOverlap(hull, w))
+
     if (
-      gridMinX - r < standable.min[0]! || gridMaxX + r > standable.max[0]! ||
-      gridMinY - r < standable.min[1]! || gridMaxY + r > standable.max[1]! ||
-      spawnZ <= room.floorZ || spawnZ + PLAYER_HULL_HEIGHT > room.bounds.max[2]!
+      inWall ||
+      hull.min[0] < room.bounds.min[0]! || hull.max[0] > room.bounds.max[0]! ||
+      hull.min[1] < room.bounds.min[1]! || hull.max[1] > room.bounds.max[1]! ||
+      spawnZ <= room.floorZ || hull.max[2] > room.bounds.max[2]!
     ) {
       throw new AuthoringError(
         'SPAWN_GRID_TOO_LARGE',
         `${req.count} spawns at ${req.spacing}u spacing in room "${room.name}" need ` +
-        `x:[${gridMinX - r},${gridMaxX + r}] y:[${gridMinY - r},${gridMaxY + r}] ` +
-        `z:[${spawnZ},${spawnZ + PLAYER_HULL_HEIGHT}] to stand in, which ` +
-        `falls outside the floor it can stand on x:[${standable.min[0]},${standable.max[0]}] ` +
-        `y:[${standable.min[1]},${standable.max[1]}] z:[${room.bounds.min[2]},${room.bounds.max[2]}]`,
+        `x:[${hull.min[0]},${hull.max[0]}] y:[${hull.min[1]},${hull.max[1]}] ` +
+        `z:[${hull.min[2]},${hull.max[2]}] to stand in, which ` +
+        (inWall
+          ? "runs into a neighbouring room's wall"
+          : `falls outside the room x:[${room.bounds.min[0]},${room.bounds.max[0]}] ` +
+            `y:[${room.bounds.min[1]},${room.bounds.max[1]}] ` +
+            `z:[${room.bounds.min[2]},${room.bounds.max[2]}]`),
         { room: room.name, count: req.count, spacing: req.spacing },
       )
     }
@@ -306,7 +330,7 @@ export function layoutEntities(layout: Layout, graph: MapGraph): VmapEntity[] {
   const out: VmapEntity[] = []
   for (const room of layout.rooms) {
     out.push(...roomEntities(
-      room, byId.get(room.id)!, standableBounds(room, layout.rooms)))
+      room, byId.get(room.id)!, intrudingWalls(room, layout.rooms)))
   }
   return out
 }

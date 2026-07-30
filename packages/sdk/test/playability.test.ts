@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import exampleMap from '../../../examples/de_example'
 import { SPAWN_FLOOR_CLEARANCE } from '../src/defaults'
-import { roomEntities, standableBounds } from '../src/entities'
+import { roomEntities, intrudingWalls } from '../src/entities'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import type { Passage, PlacedRoom } from '../src/solve'
@@ -80,7 +80,7 @@ test('every spawn point lies inside its room and is not inside any solid', () =>
 
   for (const room of layout.rooms) {
     const node = exampleMap.graph.rooms.find((r) => r.id === room.id)!
-    const spawns = roomEntities(room, node, standableBounds(room, layout.rooms)).filter((e) => e.classname.startsWith('info_player_'))
+    const spawns = roomEntities(room, node, intrudingWalls(room, layout.rooms)).filter((e) => e.classname.startsWith('info_player_'))
 
     for (const spawn of spawns) {
       spawnCount++

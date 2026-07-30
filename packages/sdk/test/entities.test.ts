@@ -3,11 +3,42 @@ import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { SPAWN_FLOOR_CLEARANCE } from '../src/defaults'
 import {
-  layoutEntities, resolvePlacement, roomEntities, standableBounds,
+  layoutEntities, resolvePlacement, roomEntities, intrudingWalls,
 } from '../src/entities'
 import { Align, Bombsite, Direction, Surface, Team, directionYaw } from '../src/types'
+import type { Vec3 } from '../src/types'
+import type { PlacedRoom } from '../src/solve'
 import { AuthoringError } from '../src/errors'
 import { thrown } from './support/errors'
+
+// The band a flush neighbour puts inside this room reaches only as far as that
+// neighbour does. Insetting the whole face instead refused grids sitting
+// nowhere near it — layouts that used to build, and that measure clear.
+test('an intruding wall is measured where it actually stands', () => {
+  const at = (id: number, min: Vec3, max: Vec3): PlacedRoom =>
+    ({ id, name: `r${id}`, bounds: { min, max }, floorZ: min[2]! })
+  const a = at(0, [-256, -256, 0], [256, 256, 192])
+  const bands = (...others: PlacedRoom[]) => intrudingWalls(a, [a, ...others])
+
+  expect(bands()).toEqual([])
+  // Sharing only a corner, or only height this room does not reach: no wall.
+  expect(bands(at(1, [256, 256, 0], [768, 768, 192]))).toEqual([])
+  expect(bands(at(1, [256, -256, 300], [768, 256, 500]))).toEqual([])
+
+  // A neighbour covering part of the face walls off only that part...
+  expect(bands(at(1, [256, -256, 0], [768, -128, 192]))).toEqual([
+    { min: [240, -256, 0], max: [256, -128, 192] },
+  ])
+  // ...and one starting above the floor walls off only the height it occupies,
+  // which a hull standing on this floor never reaches.
+  expect(bands(at(1, [256, -256, 128], [768, 256, 320]))).toEqual([
+    { min: [240, -256, 128], max: [256, 256, 192] },
+  ])
+  expect(bands(
+    at(1, [256, -256, 0], [768, 0, 192]),
+    at(2, [256, 0, 0], [768, 256, 192]),
+  )).toHaveLength(2)
+})
 
 const room = {
   id: 0, name: 'r', floorZ: 0,
@@ -107,7 +138,7 @@ test('spawn origins sit a fixed clearance above the room floor, at several floor
   let checked = 0
   for (const node of map.graph.rooms) {
     const room = roomsById.get(node.id)!
-    const spawns = roomEntities(room, node, standableBounds(room, layout.rooms)).filter((e) => e.classname.startsWith('info_player_'))
+    const spawns = roomEntities(room, node, intrudingWalls(room, layout.rooms)).filter((e) => e.classname.startsWith('info_player_'))
     expect(spawns.length).toBeGreaterThan(0)
     for (const spawn of spawns) {
       expect(spawn.origin[2]).toBe(room.floorZ + SPAWN_FLOOR_CLEARANCE)
