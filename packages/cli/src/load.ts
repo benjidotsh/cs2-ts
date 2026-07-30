@@ -30,12 +30,21 @@ export async function loadMap(file: string): Promise<CS2Map> {
 
   const map = module.default
   if (!(map instanceof CS2Map)) {
+    const kind = (map as object)?.constructor?.name ?? typeof map
     throw new Error(
       map === undefined
         ? `${file} has no default export. Add: export default map`
-        : `${file}'s default export has type ${
-            (map as object)?.constructor?.name ?? typeof map
-          }, not CS2Map. Export the value returned by new CS2Map(...).`,
+        // `instanceof` is per module instance, so a map built against a second
+        // copy of the SDK fails it while being a perfectly good CS2Map. Saying
+        // "has type CS2Map, not CS2Map" helps nobody; name the real problem.
+        : kind === 'CS2Map'
+          ? `${file} exports a CS2Map built against a different copy of ` +
+            '@cs2-ts/sdk than cs2ts is using, so the two cannot recognise each ' +
+            "other's objects.\nInstall one copy both can share — check for a " +
+            'nested node_modules/@cs2-ts/sdk, or a version mismatch between the ' +
+            'map project and the CLI.'
+          : `${file}'s default export has type ${kind}, not CS2Map. ` +
+            'Export the value returned by new CS2Map(...).',
     )
   }
   return map
