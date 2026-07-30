@@ -128,3 +128,12 @@ test('gameplay helpers record requests with defaults applied', () => {
   expect(a.node.bombsites[0]).toMatchObject({ site: Bombsite.A, size: null })
   expect(a.node.entities[0]).toMatchObject({ classname: 'light_omni2' })
 })
+
+test('a Room reports the name and size it was created with', () => {
+  // Both are on the published Room type (index.ts re-exports it), so they are
+  // API whether or not anything in this repo reads them.
+  const map = new CS2Map('de_test')
+  const a = map.room({ name: 'a', size: [512, 256, 192] })
+  expect(a.name).toBe('a')
+  expect(a.size).toEqual([512, 256, 192])
+})
