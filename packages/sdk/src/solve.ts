@@ -1,4 +1,4 @@
-import { MAX_STEP_RISE, WALL_THICKNESS, WORLD_LIMIT } from './defaults'
+import { MAX_STEP_RISE, SLAB_THICKNESS, WALL_THICKNESS, WORLD_LIMIT } from './defaults'
 import { SolverError } from './errors'
 import type { CrossEdge, MapGraph, PlacementEdge, RoomNode } from './map'
 import { AXIS, aabbsOverlap, overlap1d } from './geometry'
@@ -451,17 +451,62 @@ function checkWorldBounds(rooms: PlacedRoom[], passages: Passage[]): void {
   }
 }
 
+/**
+ * A room's brushes reach past its own bounds: the floor and ceiling slabs sit
+ * SLAB_THICKNESS below the floor and above the ceiling (see roomSlabs).
+ *
+ * The wall bands, which stand WALL_THICKNESS outside the footprint, are
+ * deliberately *not* included: flush neighbours share that zone by design, and
+ * roomSolids already resolves it by ceding the band to the slab.
+ */
+const roomBrushes = (room: PlacedRoom): Aabb => ({
+  min: [room.bounds.min[0]!, room.bounds.min[1]!, room.bounds.min[2]! - SLAB_THICKNESS],
+  max: [room.bounds.max[0]!, room.bounds.max[1]!, room.bounds.max[2]! + SLAB_THICKNESS],
+})
+
+/**
+ * A corridor's brushes likewise reach past `bounds`: a side wall
+ * WALL_THICKNESS out on either side of the cross axis, and floor and ceiling
+ * slabs SLAB_THICKNESS below and above (see corridorSolids).
+ */
+function corridorBrushes(p: Passage): Aabb {
+  const other: 0 | 1 = p.axis === 0 ? 1 : 0
+  const min = [...p.bounds.min] as Vec3
+  const max = [...p.bounds.max] as Vec3
+  min[other] -= WALL_THICKNESS
+  max[other] += WALL_THICKNESS
+  min[2] -= SLAB_THICKNESS
+  max[2] += SLAB_THICKNESS
+  return { min, max }
+}
+
+/**
+ * Every test here weighs one thing's *brushes* against another thing's
+ * interior, never bounds against bounds. Bounds describe the space a room or
+ * corridor claims; the brushes are what actually gets built, and they stand
+ * outside it. A shared face is not an overlap (see aabbsOverlap), so anything
+ * that merely grazed its neighbour used to pass while the slab or wall it
+ * emits landed squarely inside that neighbour's playable space.
+ */
 function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
       const a = rooms[i]!, b = rooms[j]!
-      if (!aabbsOverlap(a.bounds, b.bounds)) continue
+      if (!aabbsOverlap(roomBrushes(a), b.bounds) &&
+          !aabbsOverlap(a.bounds, roomBrushes(b))) continue
       const by = [0, 1, 2].map((k) =>
         overlap1d(a.bounds.min[k]!, a.bounds.max[k]!, b.bounds.min[k]!, b.bounds.max[k]!).size)
       throw new SolverError(
         'OVERLAP',
-        `rooms "${a.name}" and "${b.name}" overlap by ` +
-        `${by[0]} x ${by[1]} x ${by[2]} units`,
+        // The interiors may be clear and only the slabs in conflict, in which
+        // case one of `by` reads 0 and quoting it alone would look like a
+        // contradiction. Say which of the two it is.
+        aabbsOverlap(a.bounds, b.bounds)
+          ? `rooms "${a.name}" and "${b.name}" overlap by ` +
+            `${by[0]} x ${by[1]} x ${by[2]} units`
+          : `rooms "${a.name}" and "${b.name}" do not overlap, but their floor and ` +
+            `ceiling slabs do: one sits within ${SLAB_THICKNESS} units of the other, ` +
+            'and each room lays a slab that thick outside its own floor and ceiling',
         { rooms: [a.name, b.name], overlap: by },
       )
     }
@@ -475,9 +520,11 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
 
   // A corridor may not drive through a room it does not connect.
   for (const passage of corridors) {
+    const brushes = corridorBrushes(passage)
     for (const room of rooms) {
       if (room.id === passage.from || room.id === passage.to) continue
-      if (!aabbsOverlap(passage.bounds, room.bounds)) continue
+      if (!aabbsOverlap(brushes, room.bounds) &&
+          !aabbsOverlap(passage.bounds, roomBrushes(room))) continue
       const [from, to] = between(passage)
       throw new SolverError(
         'OVERLAP',
@@ -502,7 +549,8 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
     for (let j = i + 1; j < corridors.length; j++) {
       const p = corridors[i]!, q = corridors[j]!
       if (sameRooms(p, q)) continue
-      if (!aabbsOverlap(p.bounds, q.bounds)) continue
+      if (!aabbsOverlap(corridorBrushes(p), q.bounds) &&
+          !aabbsOverlap(p.bounds, corridorBrushes(q))) continue
       const [pFrom, pTo] = between(p), [qFrom, qTo] = between(q)
       throw new SolverError(
         'OVERLAP',

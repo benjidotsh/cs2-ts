@@ -200,24 +200,74 @@ test('a corridor driving through a third room is an overlap', () => {
   expect(error.detail.through).toBe('mid')
 })
 
-test('two corridors crossing each other is an overlap', () => {
-  // c and d hang off b's south wall either side of the a -> b corridor, so the
-  // corridor between them runs straight across it. Neither room overlaps
-  // anything; only the two corridors do, which nothing was checking.
+/**
+ * c and d hang off b's south wall either side of the a -> b corridor, so the
+ * corridor between them runs straight across it.
+ *
+ * The offset is 432, not 416: at 416 the rooms come within 16 units of the
+ * a -> b corridor, and its side wall then stands inside room c — which is a
+ * real fault of its own, and the one the next test pins down. 432 clears the
+ * side wall exactly, leaving the two corridors as the only thing wrong.
+ */
+const crossingCorridors = (offset: number) => {
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   const b = a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length: 512 })
   const c = b.room({ name: 'c', size: [704, 512, 192] },
-    { direction: Direction.South, width: 128, length: 0, offset: -416 })
+    { direction: Direction.South, width: 128, length: 0, offset: -offset })
   const d = b.room({ name: 'd', size: [704, 512, 192] },
-    { direction: Direction.South, width: 128, length: 0, offset: 416 })
+    { direction: Direction.South, width: 128, length: 0, offset })
   map.connect(c, d, { width: 128 })
+  return map
+}
 
-  const error = thrown(SolverError, () => solve(map.graph))
+test('two corridors crossing each other is an overlap', () => {
+  const error = thrown(SolverError, () => solve(crossingCorridors(432).graph))
   expect(error.code).toBe('OVERLAP')
   expect(error.detail.rooms).toEqual(['a', 'b'])
   expect(error.detail.crosses).toEqual(['c', 'd'])
+})
+
+test('a corridor grazing a room it does not connect is an overlap', () => {
+  // The corridor's bounds only touch room c, which a bounds-against-bounds
+  // test reads as clear — but the side walls stand WALL_THICKNESS outside
+  // those bounds, so a full-height wall ends up inside c's playable space.
+  // Left undetected it can brick a doorway shut on that face: the map
+  // compiles, seals, and the connection the author asked for is not there.
+  const error = thrown(SolverError, () => solve(crossingCorridors(416).graph))
+  expect(error.code).toBe('OVERLAP')
+  expect(error.detail.rooms).toEqual(['a', 'b'])
+  expect(error.detail.through).toBe('c')
+})
+
+test('rooms stacked floor-on-ceiling overlap, because their slabs do', () => {
+  // B's floor sits exactly on A's ceiling with the footprints overlapping.
+  // Neither interior intrudes on the other, so this used to be accepted —
+  // while A's ceiling slab stood 16 units inside B, and a spawn in B landed
+  // coplanar with it, which is what CS2 discards a spawn for.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'A', size: [512, 512, 192] })
+  const c = a.room({ name: 'C', size: [512, 512, 192] },
+    { direction: Direction.North, width: 128, length: 256 })
+  c.room({ name: 'B', size: [256, 512, 192] },
+    { direction: Direction.South, width: 128, length: 256, rise: 192, offset: 192 })
+
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('OVERLAP')
+  expect(error.detail.rooms).toEqual(['A', 'B'])
+})
+
+test('rooms clear of each other by the two slabs are still accepted', () => {
+  // The mirror of the case above: 32 units of gap is exactly enough for both
+  // slabs, so nothing interpenetrates and the layout must still build.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'A', size: [512, 512, 192] })
+  const c = a.room({ name: 'C', size: [512, 512, 256] },
+    { direction: Direction.North, width: 128, length: 256 })
+  c.room({ name: 'B', size: [256, 512, 192] },
+    { direction: Direction.South, width: 128, length: 256, rise: 224, offset: 192 })
+  expect(() => solve(map.graph)).not.toThrow()
 })
 
 test('an unroutable cross connection is rejected', () => {
