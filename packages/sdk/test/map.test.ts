@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { Align, Bombsite, Direction, Team, Transition } from '../src/types'
 import { AuthoringError } from '../src/errors'
+import { thrown } from './support/errors'
 
 test('anchor plus children builds a placement tree', () => {
   const map = new CS2Map('de_test')
@@ -21,40 +22,26 @@ test('anchor plus children builds a placement tree', () => {
 test('a second anchor is rejected', () => {
   const map = new CS2Map('de_test')
   map.room({ name: 'a', size: [512, 512, 192] })
-  try {
-    map.room({ name: 'b', size: [512, 512, 192] })
-    throw new Error('expected map.room to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(AuthoringError)
-    expect((e as AuthoringError).code).toBe('DUPLICATE_ANCHOR')
-  }
+  const error = thrown(AuthoringError,
+    () => map.room({ name: 'b', size: [512, 512, 192] }))
+  expect(error.code).toBe('DUPLICATE_ANCHOR')
 })
 
 test('duplicate room names are rejected', () => {
   const map = new CS2Map('de_test')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
-  try {
-    a.room({ name: 'a', size: [256, 256, 192] },
-      { direction: Direction.North, width: 128, length: 0 })
-    throw new Error('expected a.room to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(AuthoringError)
-    expect((e as AuthoringError).code).toBe('DUPLICATE_ROOM_NAME')
-  }
+  const error = thrown(AuthoringError, () => a.room({ name: 'a', size: [256, 256, 192] },
+    { direction: Direction.North, width: 128, length: 0 }))
+  expect(error.code).toBe('DUPLICATE_ROOM_NAME')
 })
 
 test('diagonal directions are rejected at runtime as well as by types', () => {
   const map = new CS2Map('de_test')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
-  try {
-    a.room({ name: 'b', size: [256, 256, 192] },
-      // deliberately bypassing the Cardinal type to prove the guard exists
-      { direction: Direction.NorthEast as never, width: 128, length: 0 })
-    throw new Error('expected a.room to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(AuthoringError)
-    expect((e as AuthoringError).code).toBe('DIAGONAL_CONNECTION')
-  }
+  const error = thrown(AuthoringError, () => a.room({ name: 'b', size: [256, 256, 192] },
+    // deliberately bypassing the Cardinal type to prove the guard exists
+    { direction: Direction.NorthEast as never, width: 128, length: 0 }))
+  expect(error.code).toBe('DIAGONAL_CONNECTION')
 })
 
 test('a rejected diagonal leaves no partial room in the graph', () => {
@@ -81,14 +68,9 @@ test.each([0, -64])('a connection height of %i is rejected on both edge kinds', 
       { direction: Direction.East, width: 128, length: 256, height }),
     () => map.connect(a, b, { width: 128, height }),
   ]) {
-    try {
-      attempt()
-      throw new Error('expected the connection to be rejected')
-    } catch (e) {
-      expect(e).toBeInstanceOf(AuthoringError)
-      expect((e as AuthoringError).code).toBe('NEGATIVE_HEIGHT')
-      expect((e as AuthoringError).detail.height).toBe(height)
-    }
+    const error = thrown(AuthoringError, attempt)
+    expect(error.code).toBe('NEGATIVE_HEIGHT')
+    expect(error.detail.height).toBe(height)
   }
 })
 

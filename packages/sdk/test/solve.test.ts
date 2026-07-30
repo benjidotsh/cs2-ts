@@ -3,6 +3,7 @@ import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { Direction, Transition } from '../src/types'
 import { SolverError } from '../src/errors'
+import { thrown } from './support/errors'
 
 function referenceMap() {
   const map = new CS2Map('de_example')
@@ -79,28 +80,20 @@ test('overlapping rooms are reported with both names', () => {
   b.room({ name: 'c', size: [2048, 2048, 192] },
     { direction: Direction.South, width: 128, length: 0 })
 
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('OVERLAP')
-    expect((e as SolverError).detail.rooms).toEqual(['a', 'c'])
-  }
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('OVERLAP')
+  expect(error.detail.rooms).toEqual(['a', 'c'])
 })
 
 test('a connection wider than the shared face is rejected', () => {
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [256, 256, 192] })
-  try {
+  const error = thrown(SolverError, () => {
     a.room({ name: 'b', size: [256, 256, 192] },
       { direction: Direction.North, width: 512, length: 0 })
     solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('INSUFFICIENT_FACE_OVERLAP')
-  }
+  })
+  expect(error.code).toBe('INSUFFICIENT_FACE_OVERLAP')
 })
 
 test('a rise with no run is rejected', () => {
@@ -108,12 +101,7 @@ test('a rise with no run is rejected', () => {
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length: 0, rise: 64 })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect((e as SolverError).code).toBe('SLOPE_WITHOUT_RUN')
-  }
+  expect(thrown(SolverError, () => solve(map.graph)).code).toBe('SLOPE_WITHOUT_RUN')
 })
 
 test('a placement rise steeper than its run is a rise conflict', () => {
@@ -121,13 +109,7 @@ test('a placement rise steeper than its run is a rise conflict', () => {
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length: 256, rise: 300 })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('RISE_CONFLICT')
-  }
+  expect(thrown(SolverError, () => solve(map.graph)).code).toBe('RISE_CONFLICT')
 })
 
 test('a placement rise exactly equal to its run (1:1) is accepted', () => {
@@ -159,14 +141,9 @@ test('a step that reaches the other room\'s ceiling leaves no clearance', () => 
   const a = map.room({ name: 'a', size: [512, 512, 64] })
   a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length: 0, rise: 64, via: Transition.Step })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('INSUFFICIENT_CLEARANCE')
-    expect((e as SolverError).detail).toMatchObject({ ceiling: 64, floor: 64 })
-  }
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('INSUFFICIENT_CLEARANCE')
+  expect(error.detail).toMatchObject({ ceiling: 64, floor: 64 })
 })
 
 test('a flush cross connection with no clear height above the higher floor is rejected', () => {
@@ -182,14 +159,9 @@ test('a flush cross connection with no clear height above the higher floor is re
   const east = north.room({ name: 'east', size: [512, 512, 192] },
     { direction: Direction.East, width: 128, length: 0, rise: 64, via: Transition.Step })
   map.connect(ground, east, { width: 128, via: Transition.Step })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('INSUFFICIENT_CLEARANCE')
-    expect((e as SolverError).detail).toMatchObject({ a: 'ground', b: 'east' })
-  }
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('INSUFFICIENT_CLEARANCE')
+  expect(error.detail).toMatchObject({ a: 'ground', b: 'east' })
 })
 
 test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
@@ -223,14 +195,9 @@ test('a corridor driving through a third room is an overlap', () => {
     { direction: Direction.West, width: 128, length: 512 })
   map.connect(aSite, bSite, { width: 128 })
 
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('OVERLAP')
-    expect((e as SolverError).detail.through).toBe('mid')
-  }
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('OVERLAP')
+  expect(error.detail.through).toBe('mid')
 })
 
 test('two corridors crossing each other is an overlap', () => {
@@ -247,15 +214,10 @@ test('two corridors crossing each other is an overlap', () => {
     { direction: Direction.South, width: 128, length: 0, offset: 416 })
   map.connect(c, d, { width: 128 })
 
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('OVERLAP')
-    expect((e as SolverError).detail.rooms).toEqual(['a', 'b'])
-    expect((e as SolverError).detail.crosses).toEqual(['c', 'd'])
-  }
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('OVERLAP')
+  expect(error.detail.rooms).toEqual(['a', 'b'])
+  expect(error.detail.crosses).toEqual(['c', 'd'])
 })
 
 test('an unroutable cross connection is rejected', () => {
@@ -266,12 +228,7 @@ test('an unroutable cross connection is rejected', () => {
   const c = b.room({ name: 'c', size: [512, 512, 192] },
     { direction: Direction.East, width: 128, length: 1024 })
   map.connect(a, c, { width: 128 })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect((e as SolverError).code).toBe('UNROUTABLE_CONNECTION')
-  }
+  expect(thrown(SolverError, () => solve(map.graph)).code).toBe('UNROUTABLE_CONNECTION')
 })
 
 test('a cross connection separated but with too little overlap is INSUFFICIENT_FACE_OVERLAP, not unroutable', () => {
@@ -284,14 +241,9 @@ test('a cross connection separated but with too little overlap is INSUFFICIENT_F
   const b = a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 64, length: 512, offset: 448 })
   map.connect(a, b, { width: 256 })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('INSUFFICIENT_FACE_OVERLAP')
-    expect((e as SolverError).detail.overlap).toBe(64)
-  }
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('INSUFFICIENT_FACE_OVERLAP')
+  expect(error.detail.overlap).toBe(64)
 })
 
 test('a flush cross connection with a height difference and a ramp is a rise conflict', () => {
@@ -300,13 +252,7 @@ test('a flush cross connection with a height difference and a ramp is a rise con
   const b = a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length: 0, rise: 64, via: Transition.Step })
   map.connect(a, b, { width: 128 })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('RISE_CONFLICT')
-  }
+  expect(thrown(SolverError, () => solve(map.graph)).code).toBe('RISE_CONFLICT')
 })
 
 test('a stepped cross connection with a 128-unit rise is a rise conflict', () => {
@@ -318,12 +264,7 @@ test('a stepped cross connection with a 128-unit rise is a rise conflict', () =>
   const b = a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length: 256, rise: 128, via: Transition.Ramp })
   map.connect(a, b, { width: 128, via: Transition.Step })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect((e as SolverError).code).toBe('RISE_CONFLICT')
-  }
+  expect(thrown(SolverError, () => solve(map.graph)).code).toBe('RISE_CONFLICT')
 })
 
 test('a stepped cross connection with a 64-unit rise is accepted', () => {
@@ -353,13 +294,7 @@ test.each([0, 256])('a placement step taller than a player is a rise conflict, l
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length, rise: 128, via: Transition.Step })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    expect((e as SolverError).code).toBe('RISE_CONFLICT')
-  }
+  expect(thrown(SolverError, () => solve(map.graph)).code).toBe('RISE_CONFLICT')
 })
 
 test('a placement step a player can climb is accepted', () => {
@@ -377,14 +312,10 @@ test('the remediation for a rise with no run does not point at Transition.Step',
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   a.room({ name: 'b', size: [512, 512, 192] },
     { direction: Direction.North, width: 128, length: 0, rise: 300 })
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect((e as SolverError).code).toBe('SLOPE_WITHOUT_RUN')
-    expect((e as SolverError).message).not.toContain('Step')
-    expect((e as SolverError).message).toContain('length of at least 300 units')
-  }
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('SLOPE_WITHOUT_RUN')
+  expect(error.message).not.toContain('Step')
+  expect(error.message).toContain('length of at least 300 units')
 })
 
 test('a layout that runs past the edge of the world is rejected, naming the room and axis', () => {
@@ -396,17 +327,11 @@ test('a layout that runs past the edge of the world is rejected, naming the room
     room = room.room({ name: `r${i}`, size: [1024, 1024, 192] },
       { direction: Direction.East, width: 128, length: 0 })
   }
-  try {
-    solve(map.graph)
-    throw new Error('expected solve to throw')
-  } catch (e) {
-    expect(e).toBeInstanceOf(SolverError)
-    const error = e as SolverError
-    expect(error.code).toBe('OUT_OF_BOUNDS')
-    expect(error.detail.axis).toBe('x')
-    expect(error.message).toMatch(/room "r\d+"/)
-    expect(Math.abs(error.detail.value as number)).toBeGreaterThan(16384)
-  }
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('OUT_OF_BOUNDS')
+  expect(error.detail.axis).toBe('x')
+  expect(error.message).toMatch(/room "r\d+"/)
+  expect(Math.abs(error.detail.value as number)).toBeGreaterThan(16384)
 })
 
 test('a layout that fits inside the world is not rejected', () => {
