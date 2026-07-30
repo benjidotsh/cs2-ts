@@ -137,3 +137,19 @@ test('a Room reports the name and size it was created with', () => {
   expect(a.name).toBe('a')
   expect(a.size).toEqual([512, 256, 192])
 })
+
+test('a bomb site with a non-positive or non-finite side is rejected', () => {
+  // [0,0,0] used to reach the mesh builder and throw a bare "degenerate face"
+  // Error with no code; a negative side emitted an inside-out brush, every
+  // face wound inward, and nothing downstream noticed.
+  const map = new CS2Map('de_test')
+  const a = map.room({ name: 'a', size: [1024, 1024, 192] })
+  for (const size of BAD_SIZES.concat([[0, 0, 0], [-256, 256, 128]] as Vec3[])) {
+    const error = thrown(AuthoringError, () => a.bombsite(Bombsite.A, { size }))
+    expect(error.code).toBe('INVALID_BOMBSITE_SIZE')
+  }
+  expect(a.node.bombsites).toHaveLength(0)
+  // The default (no size at all) still means "the room's own footprint".
+  a.bombsite(Bombsite.A)
+  expect(a.node.bombsites[0]!.size).toBeNull()
+})

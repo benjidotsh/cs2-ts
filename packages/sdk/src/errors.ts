@@ -16,6 +16,7 @@ export type AuthoringErrorCode =
   | 'INVALID_SPAWN_GRID'
   | 'NEGATIVE_HEIGHT'
   | 'INVALID_ROOM_SIZE'
+  | 'INVALID_BOMBSITE_SIZE'
 
 export class Cs2tsError extends Error {
   constructor(

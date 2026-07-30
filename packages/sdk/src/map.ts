@@ -157,6 +157,19 @@ class Room {
 
   bombsite(site: Bombsite, options: BombsiteOptions = {}): void {
     const { size, ...placement } = options
+    // The last unchecked size in the public API, and it fails the same two
+    // ways a room's did: all-zero reaches the mesh builder as a degenerate
+    // face and throws a bare Error with no code, and a negative side emits an
+    // inside-out brush — every face wound inward — which nothing downstream
+    // notices.
+    if (size !== undefined && !size.every((n) => Number.isFinite(n) && n > 0)) {
+      throw new AuthoringError(
+        'INVALID_BOMBSITE_SIZE',
+        `bomb site ${site} in room "${this.name}" has size ${size.join(' x ')}; ` +
+        'every side must be a finite number greater than 0',
+        { room: this.name, site, size },
+      )
+    }
     this.node.bombsites.push({ site, placement, size: size ?? null })
   }
 }
