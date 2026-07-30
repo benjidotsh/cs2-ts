@@ -21,6 +21,36 @@ test('floats never use exponent notation and drop trailing zeros', () => {
   expect(formatFloat(1e-7)).toBe('0.0000001')
 })
 
+// Every KV2 string is quote-delimited, so a value carrying a quote of its own
+// closes the token early and the rest of the line becomes syntax: the compiler
+// rejected the whole file with "Expecting '}', didn't find it!". Entity
+// keyvalues are author-supplied text, so this is reachable from the public API
+// with a single character.
+test('strings carrying quotes, backslashes or newlines stay one token', () => {
+  const guid = createGuidFactory('t')
+  const root = element('CMapRootElement', guid(), [
+    ['message', { kind: 'string', value: 'He said "hi" \\ and\nthen left' }],
+    ['he said "what"', { kind: 'string', value: 'quoted name' }],
+    ['names', { kind: 'string_array', value: ['a"b', 'c\\d'] }],
+  ])
+  const lines = serializeDocument(root).split('\n')
+
+  const message = lines.find((l) => l.includes('He said'))!
+  expect(message.trim())
+    .toBe('"message" "string" "He said \\"hi\\" \\\\ and\\nthen left"')
+  // The value stayed on one line: a raw newline would have split it in two.
+  expect(lines.filter((l) => l.includes('then left'))).toHaveLength(1)
+  expect(lines.find((l) => l.includes('what'))!.trim())
+    .toBe('"he said \\"what\\"" "string" "quoted name"')
+  expect(lines.some((l) => l.trim() === '"a\\"b",')).toBe(true)
+  expect(lines.some((l) => l.trim() === '"c\\\\d"')).toBe(true)
+
+  // Nothing anywhere may carry a bare quote inside a token.
+  for (const line of lines.slice(1)) {
+    expect(line.replace(/\\./g, '').split('"').length % 2).toBe(1)
+  }
+})
+
 test('serializes a nested document with the vmap header', () => {
   const guid = createGuidFactory('t')
   const child = element('CMapMesh', guid(), [

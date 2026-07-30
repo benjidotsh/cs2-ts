@@ -44,11 +44,28 @@ export function formatFloat(n: number): string {
   return s === '-0' ? '0' : s
 }
 
+/**
+ * Every string in a KeyValues2 document is delimited by double quotes, so a
+ * value carrying one of its own ends the token early and the rest of the line
+ * becomes syntax. A single `"` in an entity keyvalue — which
+ * `Room.entity(classname, placement, properties)` puts entirely in the
+ * author's hands — was enough to make the compiler give up on the whole file
+ * with "Expecting '}', didn't find it!".
+ *
+ * Backslash first, or the escapes added after it would be escaped in turn.
+ */
+const escape = (s: string): string => s
+  .replace(/\\/g, '\\\\')
+  .replace(/"/g, '\\"')
+  .replace(/\n/g, '\\n')
+  .replace(/\r/g, '\\r')
+  .replace(/\t/g, '\\t')
+
 const vec = (v: number[]) => v.map(formatFloat).join(' ')
 
 function scalar(value: DmxValue): string | null {
   switch (value.kind) {
-    case 'string': return value.value
+    case 'string': return escape(value.value)
     case 'bool': return value.value ? '1' : '0'
     case 'int': return String(Math.trunc(value.value))
     case 'float': return formatFloat(value.value)
@@ -62,7 +79,7 @@ function scalar(value: DmxValue): string | null {
 function arrayItems(value: DmxValue): string[] | null {
   switch (value.kind) {
     case 'int_array': return value.value.map((n) => String(Math.trunc(n)))
-    case 'string_array': return value.value
+    case 'string_array': return value.value.map(escape)
     case 'vector2_array': case 'vector3_array': case 'vector4_array':
       return value.value.map(vec)
     default: return null
@@ -78,13 +95,13 @@ function writeElement(el: DmxElement, depth: number, out: string[]): void {
   for (const [name, value] of el.attributes) {
     const flat = scalar(value)
     if (flat !== null) {
-      out.push(`${inner}"${name}" "${value.kind}" "${flat}"`)
+      out.push(`${inner}"${escape(name)}" "${value.kind}" "${flat}"`)
       continue
     }
 
     const items = arrayItems(value)
     if (items !== null) {
-      out.push(`${inner}"${name}" "${value.kind}" `)
+      out.push(`${inner}"${escape(name)}" "${value.kind}" `)
       out.push(`${inner}[`)
       items.forEach((item, i) => {
         out.push(`${inner}\t"${item}"${i < items.length - 1 ? ',' : ''}`)
@@ -95,9 +112,9 @@ function writeElement(el: DmxElement, depth: number, out: string[]): void {
 
     if (value.kind === 'element') {
       if (value.value === null) {
-        out.push(`${inner}"${name}" "element" ""`)
+        out.push(`${inner}"${escape(name)}" "element" ""`)
       } else {
-        out.push(`${inner}"${name}" "${value.value.type}"`)
+        out.push(`${inner}"${escape(name)}" "${value.value.type}"`)
         writeElement(value.value, depth + 1, out)
         out.push('')
       }
@@ -105,7 +122,7 @@ function writeElement(el: DmxElement, depth: number, out: string[]): void {
     }
 
     if (value.kind === 'element_array') {
-      out.push(`${inner}"${name}" "element_array" `)
+      out.push(`${inner}"${escape(name)}" "element_array" `)
       out.push(`${inner}[`)
       value.value.forEach((child, i) => {
         out.push(`${inner}\t"${child.type}"`)
