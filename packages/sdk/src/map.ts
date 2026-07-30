@@ -143,9 +143,6 @@ class Room {
 
 export class CS2Map {
   readonly graph: MapGraph
-  private nextId = 0
-  private anchorSet = false
-  private readonly names = new Set<string>()
 
   constructor(name: string) {
     this.graph = { name, rooms: [], placements: [], crossEdges: [] }
@@ -153,7 +150,9 @@ export class CS2Map {
 
   /** Creates the anchor room. May be called once. */
   room(spec: RoomSpec): Room {
-    if (this.anchorSet) {
+    // Every other room is created through an existing Room, so any room at all
+    // means the anchor is already among them.
+    if (this.graph.rooms.length > 0) {
       throw new AuthoringError(
         'DUPLICATE_ANCHOR',
         `map "${this.graph.name}" already has an anchor room; create "${spec.name}" ` +
@@ -161,7 +160,6 @@ export class CS2Map {
         { existing: this.graph.rooms[0]?.name, attempted: spec.name },
       )
     }
-    this.anchorSet = true
     return this.createRoom(spec)
   }
 
@@ -210,16 +208,15 @@ export class CS2Map {
   }
 
   private createRoom(spec: RoomSpec): Room {
-    if (this.names.has(spec.name)) {
+    if (this.graph.rooms.some((r) => r.name === spec.name)) {
       throw new AuthoringError(
         'DUPLICATE_ROOM_NAME',
         `a room named "${spec.name}" already exists`,
         { name: spec.name },
       )
     }
-    this.names.add(spec.name)
     const node: RoomNode = {
-      id: this.nextId++,
+      id: this.graph.rooms.length,
       name: spec.name,
       size: spec.size,
       entities: [],
