@@ -321,3 +321,26 @@ test('one buy zone per room however many spawn groups that room has', () => {
   const ents = layoutEntities(solve(map.graph), map.graph)
   expect(ents.filter((e) => e.classname === 'func_buyzone')).toHaveLength(1)
 })
+
+test('a flush neighbour\'s wall counts against the floor a spawn grid needs', () => {
+  // A room's wall band is emitted outside its own bounds, so on a flush face
+  // it is the *neighbour's* band standing 16 units inside this room. Measuring
+  // the grid against the bounds put half of each 32-wide hull in a wall that
+  // detectOverlaps deliberately allows — and CS2 discards a spawn stuck in
+  // geometry, so all four were lost and the team read as full.
+  const withNeighbours = new CS2Map('t')
+  const a = withNeighbours.room({ name: 'a', size: [288, 288, 192] })
+  a.room({ name: 'w', size: [512, 512, 192] },
+    { direction: Direction.West, width: 128, length: 0 })
+  a.room({ name: 'e', size: [512, 512, 192] },
+    { direction: Direction.East, width: 128, length: 0 })
+  a.spawns(Team.CT, { count: 4, spacing: 256 })
+  expect(() => layoutEntities(solve(withNeighbours.graph), withNeighbours.graph))
+    .toThrow(AuthoringError)
+
+  // The very same grid in the very same room, with nothing flush against it,
+  // has the whole 288 to stand in and must still be accepted.
+  const alone = new CS2Map('t2')
+  alone.room({ name: 'a', size: [288, 288, 192] }).spawns(Team.CT, { count: 4, spacing: 256 })
+  expect(() => layoutEntities(solve(alone.graph), alone.graph)).not.toThrow()
+})

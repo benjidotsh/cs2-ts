@@ -1,13 +1,15 @@
 import {
   MATERIALS, PLAYER_HULL_HEIGHT, PLAYER_HULL_RADIUS, SPAWN_FLOOR_CLEARANCE,
+  WALL_THICKNESS,
 } from './defaults'
+import { overlap1d } from './geometry'
 import { AuthoringError } from './errors'
 import type { MapGraph, RoomNode } from './map'
 import type { Layout, PlacedRoom } from './solve'
 import type { VmapEntity } from './vmap/document'
 import {
   Align, Bombsite, Surface, Team, directionYaw,
-  type Placement, type Vec3,
+  type Aabb, type Placement, type Vec3,
 } from './types'
 
 /** -1 = min edge, 0 = centre, +1 = max edge, in (horizontal, vertical) order. */
@@ -125,7 +127,47 @@ function brushEntity(
   }
 }
 
-export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
+/**
+ * The floor a player can actually stand on, which is not the room's bounds.
+ *
+ * A room's wall band is emitted *outside* its own bounds, so on a face shared
+ * flush with a neighbour it is that neighbour's band standing WALL_THICKNESS
+ * inside this room. detectOverlaps deliberately allows it — flush rooms share
+ * that zone by design — so a spawn measured against the bounds alone can end
+ * up half-buried in a wall nothing else objects to.
+ */
+function standableBounds(room: PlacedRoom, rooms: readonly PlacedRoom[]): Aabb {
+  const min: Vec3 = [...room.bounds.min]
+  const max: Vec3 = [...room.bounds.max]
+
+  for (const other of rooms) {
+    if (other.id === room.id) continue
+    // Only a neighbour that meets this face and overlaps it in the other two
+    // axes puts a wall across the floor here.
+    for (const axis of [0, 1] as const) {
+      const cross: 0 | 1 = axis === 0 ? 1 : 0
+      if (overlap1d(room.bounds.min[cross]!, room.bounds.max[cross]!,
+        other.bounds.min[cross]!, other.bounds.max[cross]!).size <= 0) continue
+      if (overlap1d(room.bounds.min[2]!, room.bounds.max[2]!,
+        other.bounds.min[2]!, other.bounds.max[2]!).size <= 0) continue
+
+      if (other.bounds.max[axis]! === room.bounds.min[axis]!) {
+        min[axis] = Math.max(min[axis]!, room.bounds.min[axis]! + WALL_THICKNESS)
+      }
+      if (other.bounds.min[axis]! === room.bounds.max[axis]!) {
+        max[axis] = Math.min(max[axis]!, room.bounds.max[axis]! - WALL_THICKNESS)
+      }
+    }
+  }
+  return { min, max }
+}
+
+export function roomEntities(
+  room: PlacedRoom,
+  node: RoomNode,
+  /** Defaults to the room's own bounds, for a room standing on its own. */
+  standable: Aabb = room.bounds,
+): VmapEntity[] {
   const out: VmapEntity[] = []
 
   for (const req of node.entities) {
@@ -160,18 +202,19 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
     // or above its own ceiling, so that has to fail the same fit check.
     const spawnZ = origin[2] + SPAWN_FLOOR_CLEARANCE
 
-    // What has to fit is the player, not the origin. The walls stand at the
-    // room's bounds, so an origin exactly on that plane buries half a 32-wide
-    // hull in the wall — the same "stuck in geometry" rejection the floor
-    // clearance avoids, reached sideways. The grid is measured with a hull's
-    // half-width around it, and the standing height above it.
+    // What has to fit is the player, not the origin, and it has to fit in the
+    // floor the room really has — `standable`, which is the bounds less any
+    // wall a flush neighbour stands inside them. An origin on a wall plane
+    // buries half a 32-wide hull in it, the same "stuck in geometry" rejection
+    // the floor clearance avoids, reached sideways.
+    //
     // `spawnZ <= floorZ` matters as much as the ceiling: a placement's `at`
     // can carry the grid down through the floor slab, or clean out of the map
-    // below it, and neither the x/y bounds nor the ceiling test can see that.
+    // below it, and neither the x/y test nor the ceiling one can see that.
     const r = PLAYER_HULL_RADIUS
     if (
-      gridMinX - r < room.bounds.min[0]! || gridMaxX + r > room.bounds.max[0]! ||
-      gridMinY - r < room.bounds.min[1]! || gridMaxY + r > room.bounds.max[1]! ||
+      gridMinX - r < standable.min[0]! || gridMaxX + r > standable.max[0]! ||
+      gridMinY - r < standable.min[1]! || gridMaxY + r > standable.max[1]! ||
       spawnZ <= room.floorZ || spawnZ + PLAYER_HULL_HEIGHT > room.bounds.max[2]!
     ) {
       throw new AuthoringError(
@@ -179,8 +222,8 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
         `${req.count} spawns at ${req.spacing}u spacing in room "${room.name}" need ` +
         `x:[${gridMinX - r},${gridMaxX + r}] y:[${gridMinY - r},${gridMaxY + r}] ` +
         `z:[${spawnZ},${spawnZ + PLAYER_HULL_HEIGHT}] to stand in, which ` +
-        `falls outside the room's bounds x:[${room.bounds.min[0]},${room.bounds.max[0]}] ` +
-        `y:[${room.bounds.min[1]},${room.bounds.max[1]}] z:[${room.bounds.min[2]},${room.bounds.max[2]}]`,
+        `falls outside the floor it can stand on x:[${standable.min[0]},${standable.max[0]}] ` +
+        `y:[${standable.min[1]},${standable.max[1]}] z:[${room.bounds.min[2]},${room.bounds.max[2]}]`,
         { room: room.name, count: req.count, spacing: req.spacing },
       )
     }
@@ -257,7 +300,8 @@ export function layoutEntities(layout: Layout, graph: MapGraph): VmapEntity[] {
   const byId = new Map(graph.rooms.map((r) => [r.id, r]))
   const out: VmapEntity[] = []
   for (const room of layout.rooms) {
-    out.push(...roomEntities(room, byId.get(room.id)!))
+    out.push(...roomEntities(
+      room, byId.get(room.id)!, standableBounds(room, layout.rooms)))
   }
   return out
 }
