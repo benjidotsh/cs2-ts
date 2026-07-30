@@ -17,11 +17,14 @@ export async function loadMap(file: string): Promise<CS2Map> {
     module = await import(absolute)
   } catch (cause) {
     const message = cause instanceof Error ? cause.message : String(cause)
-    // Both halves matter: a map module that merely *mentions* the package in
-    // an error of its own is not a resolution failure, and reporting it as one
-    // discards the real error for a suggestion that cannot help.
-    const unresolved = /cannot find (module|package)|could not resolve|failed to resolve/i
-    if (message.includes('@cs2-ts/sdk') && unresolved.test(message)) {
+    // Matched as a whole quoted specifier, not as a substring: `bun add
+    // @cs2-ts/sdk` is the right advice only when the *package* is what failed
+    // to resolve. "@cs2-ts/sdk/solve" — the SDK exports "." alone, so every
+    // subpath fails — resolves fine as a package and needs the real error, as
+    // does any module error that merely quotes the name.
+    const unresolved =
+      /(?:cannot find (?:module|package)|could not resolve|failed to resolve)\s*["']@cs2-ts\/sdk["']/i
+    if (unresolved.test(message)) {
       throw new Error(
         `${file} imports @cs2-ts/sdk, but it could not be resolved from ` +
         `${dirname(absolute)}.\n` +
