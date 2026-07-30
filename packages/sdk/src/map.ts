@@ -132,6 +132,26 @@ class Room {
 
   spawns(team: Team, options: SpawnOptions): void {
     const { count, spacing = 128, ...placement } = options
+    // Both are facts about the request alone, so they are settled here rather
+    // than at lowering time: the author hears about it at the call that is
+    // wrong, and "you asked for 0 spawns" stops arriving under the code that
+    // means "your grid does not fit the room".
+    if (!Number.isInteger(count) || count <= 0) {
+      throw new AuthoringError(
+        'INVALID_SPAWN_GRID',
+        `room "${this.name}" asked for ${count} spawns; a count must be a whole ` +
+        'number greater than 0',
+        { room: this.name, count, spacing },
+      )
+    }
+    if (!Number.isFinite(spacing) || spacing <= 0) {
+      throw new AuthoringError(
+        'INVALID_SPAWN_GRID',
+        `room "${this.name}" asked for ${spacing}u spawn spacing; spacing must be ` +
+        'a finite number greater than 0',
+        { room: this.name, count, spacing },
+      )
+    }
     this.node.spawns.push({ team, count, spacing, placement })
   }
 

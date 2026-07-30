@@ -5,6 +5,7 @@ import { SPAWN_FLOOR_CLEARANCE } from '../src/defaults'
 import { layoutEntities, resolvePlacement, roomEntities } from '../src/entities'
 import { Align, Bombsite, Direction, Surface, Team, directionYaw } from '../src/types'
 import { AuthoringError } from '../src/errors'
+import { thrown } from './support/errors'
 
 const room = {
   id: 0, name: 'r', floorZ: 0,
@@ -173,16 +174,23 @@ test('a room too short for a standing player is an error', () => {
   expect(() => layoutEntities(solve(map2.graph), map2.graph)).not.toThrow()
 })
 
-test('a non-positive spawn count is an error, not a silent no-op', () => {
+// count and spacing say nothing about where the room ended up, so they are
+// settled at the spawns() call rather than waiting for buildVmap — and under
+// their own code, not the one that means "your grid does not fit the room".
+test('a spawn count or spacing that is not a positive number is rejected at once', () => {
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [512, 512, 192] })
-  a.spawns(Team.T, { count: 0 })
-  expect(() => layoutEntities(solve(map.graph), map.graph)).toThrow(AuthoringError)
 
-  const map2 = new CS2Map('t2')
-  const b = map2.room({ name: 'b', size: [512, 512, 192] })
-  b.spawns(Team.T, { count: -1 })
-  expect(() => layoutEntities(solve(map2.graph), map2.graph)).toThrow(AuthoringError)
+  for (const options of [
+    { count: 0 }, { count: -1 }, { count: 2.5 }, { count: NaN },
+    { count: 4, spacing: 0 }, { count: 4, spacing: -128 },
+  ]) {
+    const error = thrown(AuthoringError, () => a.spawns(Team.T, options))
+    expect(error.code).toBe('INVALID_SPAWN_GRID')
+  }
+  // Nothing bad was recorded, so the map still builds.
+  expect(a.node.spawns).toHaveLength(0)
+  expect(() => layoutEntities(solve(map.graph), map.graph)).not.toThrow()
 })
 
 test('a bombsite is a brush entity whose volume defaults to the room footprint', () => {

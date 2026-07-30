@@ -139,14 +139,8 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
   }
 
   for (const req of node.spawns) {
-    if (req.count <= 0) {
-      throw new AuthoringError(
-        'SPAWN_GRID_TOO_LARGE',
-        `room "${room.name}" requested ${req.count} spawns; count must be positive`,
-        { room: room.name, count: req.count, spacing: req.spacing },
-      )
-    }
-
+    // count and spacing are settled by Room.spawns(); only the fit against
+    // this room's placed bounds can be judged here.
     const cols = Math.ceil(Math.sqrt(req.count))
     const rows = Math.ceil(req.count / cols)
     const gridW = (cols - 1) * req.spacing
