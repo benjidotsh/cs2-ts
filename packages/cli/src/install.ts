@@ -21,7 +21,7 @@ export interface Cs2Install {
 const CS2_DIR = 'Counter-Strike Global Offensive'
 const DEFAULT_ROOT = `/mnt/c/Program Files (x86)/Steam/steamapps/common/${CS2_DIR}`
 
-const exists = (p: string) => access(p).then(() => true, () => false)
+export const exists = (p: string) => access(p).then(() => true, () => false)
 
 const hasTools = (root: string) => exists(join(root, 'game', 'bin', 'win64'))
 

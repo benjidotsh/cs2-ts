@@ -14,8 +14,8 @@ export interface PlacedRoom {
   /**
    * Always `bounds.min[2]`. Kept as a field because the lowering pipeline
    * reads it some thirty times — where a room's floor sits is the question,
-   * and `bounds.min[2]!` is not the way to ask it. Both are set together at
-   * each of the two construction sites below; nothing may set one alone.
+   * and `bounds.min[2]!` is not the way to ask it. `placedRoom` below is the
+   * only thing that sets it, so the two cannot drift apart.
    */
   floorZ: number
 }
@@ -66,6 +66,10 @@ export interface Layout {
 export const isCorridor = (p: Passage): boolean =>
   p.bounds.max[p.axis]! > p.bounds.min[p.axis]!
 
+/** The one place floorZ is set, so it cannot drift from the bounds it mirrors. */
+const placedRoom = (id: number, name: string, bounds: Aabb): PlacedRoom =>
+  ({ id, name, bounds, floorZ: bounds.min[2]! })
+
 /**
  * Ceiling height at each end of a corridor, given each end's floor and the
  * ceiling of the room it opens into.
@@ -82,15 +86,13 @@ export const isCorridor = (p: Passage): boolean =>
  * above the room it meets.
  */
 function corridorCeilings(
-  fromFloorZ: number, fromRoomCeilingZ: number,
-  toFloorZ: number, toRoomCeilingZ: number,
-  height: number | null,
-): [number, number] {
+  from: PassageEnd, to: PassageEnd, height: number | null,
+): [CorridorEnd, CorridorEnd] {
   const clear = height ?? Math.min(
-    fromRoomCeilingZ - fromFloorZ, toRoomCeilingZ - toFloorZ)
+    from.roomCeilingZ - from.z, to.roomCeilingZ - to.z)
   return [
-    Math.min(fromRoomCeilingZ, fromFloorZ + clear),
-    Math.min(toRoomCeilingZ, toFloorZ + clear),
+    { ...from, ceilingZ: Math.min(from.roomCeilingZ, from.z + clear) },
+    { ...to, ceilingZ: Math.min(to.roomCeilingZ, to.z + clear) },
   ]
 }
 
@@ -223,11 +225,12 @@ function corridorPinches(
  * The opening height at each end of a way through, and the verdict on whether
  * it can be walked.
  *
- * Both edge kinds end the same way — resolve the two ceilings, then build the
- * passage — and the two used to spell it out separately, 80 lines apart under
- * different names. Every change to what a passage's ends are had to be made
- * twice, which is how the clearance guard came to be written into this code
- * four times over.
+ * Both edge kinds resolve their ceilings the same way, and used to spell it
+ * out separately, 80 lines apart under different names — which is how the
+ * clearance guard came to be written into this code four times over. (Each
+ * still builds its own bounds afterwards: they arrive at the two axis extents
+ * differently enough that sharing that half would take more arguments than it
+ * saves.)
  */
 function passageCeilings(
   from: PassageEnd, to: PassageEnd,
@@ -243,16 +246,11 @@ function passageCeilings(
     return [shared, shared]
   }
 
-  const [fromCeilingZ, toCeilingZ] = corridorCeilings(
-    from.z, from.roomCeilingZ, to.z, to.roomCeilingZ, height)
+  const [fromEnd, toEnd] = corridorCeilings(from, to, height)
 
-  const ends: [CorridorEnd, CorridorEnd] = [
-    { ...from, ceilingZ: fromCeilingZ },
-    { ...to, ceilingZ: toCeilingZ },
-  ]
   // The guard hands back the end it blames, so the message cannot come to
   // quote a different one than the rule measured.
-  const pinched = corridorPinches(ends[0], ends[1], run, via)
+  const pinched = corridorPinches(fromEnd, toEnd, run, via)
   if (pinched) {
     const clear = pinched.ceilingZ - pinched.z
     throw new SolverError(
@@ -265,7 +263,7 @@ function passageCeilings(
       { ...detail, clear, rise: to.z - from.z, run, via },
     )
   }
-  return [fromCeilingZ, toCeilingZ]
+  return [fromEnd.ceilingZ, toEnd.ceilingZ]
 }
 
 function assertPositiveWidth(
@@ -348,15 +346,10 @@ export function solve(graph: MapGraph): Layout {
 
   // The anchor is the first declared room, centred on the origin at z = 0.
   const anchor = graph.rooms[0]!
-  placed.set(anchor.id, {
-    id: anchor.id,
-    name: anchor.name,
-    bounds: {
-      min: [-anchor.size[0] / 2, -anchor.size[1] / 2, 0],
-      max: [anchor.size[0] / 2, anchor.size[1] / 2, anchor.size[2]],
-    },
-    floorZ: 0,
-  })
+  placed.set(anchor.id, placedRoom(anchor.id, anchor.name, {
+    min: [-anchor.size[0] / 2, -anchor.size[1] / 2, 0],
+    max: [anchor.size[0] / 2, anchor.size[1] / 2, anchor.size[2]],
+  }))
 
   // Placement edges form a tree in declaration order, so a single forward pass
   // always sees the parent before the child.
@@ -405,7 +398,7 @@ export function solve(graph: MapGraph): Layout {
     min[other] = childMinOther; max[other] = childMaxOther
 
     const bounds: Aabb = { min, max }
-    placed.set(child.id, { id: child.id, name: child.name, bounds, floorZ })
+    placed.set(child.id, placedRoom(child.id, child.name, bounds))
 
     // The passage spans the overlap of the two facing walls, centred.
     const span = overlap1d(
@@ -423,10 +416,9 @@ export function solve(graph: MapGraph): Layout {
     // (the parent) at the passage's min end.
     const fromAtMinEnd = sign === 1
 
-    // Flush rooms share one ceiling, having no corridor of their own to bridge
-    // two heights with. Everything after this is common ground: a flush
-    // connection leaves `nearFace` on `parentFace`, so the same bounds come out
-    // as the zero-thickness marker that tells toSolids where to cut.
+    // A flush connection leaves `nearFace` on `parentFace`, so the bounds
+    // built below come out as the zero-thickness marker that tells toSolids
+    // where to cut — no separate branch for it.
     const [fromCeilingZ, toCeilingZ] = passageCeilings(
       { z: parent.floorZ, roomCeilingZ: parent.bounds.max[2]! },
       { z: floorZ, roomCeilingZ: childCeilingZ },

@@ -1,8 +1,7 @@
 #!/usr/bin/env bun
-import { access } from 'node:fs/promises'
 import { basename, join } from 'node:path'
 import { Command } from 'commander'
-import { findCs2Install, preflight } from './install'
+import { exists, findCs2Install, preflight } from './install'
 import { addonPaths } from './addon'
 import { addonName, wholeNumber } from './options'
 import { emitMap, initAddon } from './commands'
@@ -72,7 +71,7 @@ async function buildAddonMap(file: string, preset: Preset, opts: BuildOptions) {
   // was never built.
   const mapName = basename(written, '.vmap')
   const vpk = join(addonPaths(install, opts.addon).gameMaps, `${mapName}.vpk`)
-  if (!(await access(vpk).then(() => true, () => false))) {
+  if (!(await exists(vpk))) {
     throw new Error(
       `the compiler exited cleanly but wrote no ${mapName}.vpk to ${vpk}.\n` +
       'Its output is above — look for "Failed loading resource" or an error ' +
