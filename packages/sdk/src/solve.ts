@@ -8,6 +8,12 @@ export interface PlacedRoom {
   id: number
   name: string
   bounds: Aabb
+  /**
+   * Always `bounds.min[2]`. Kept as a field because the lowering pipeline
+   * reads it some thirty times — where a room's floor sits is the question,
+   * and `bounds.min[2]!` is not the way to ask it. Both are set together at
+   * each of the two construction sites below; nothing may set one alone.
+   */
   floorZ: number
 }
 
