@@ -1,3 +1,4 @@
+import type { PlacedRoom } from '../../src/solve'
 import { Direction } from '../../src/types'
 import type { Solid, Vec3, WedgeSolid } from '../../src/types'
 
@@ -28,6 +29,19 @@ import type { Solid, Vec3, WedgeSolid } from '../../src/types'
  */
 
 interface Box { min: Vec3; max: Vec3 }
+
+/**
+ * Where to start a flood fill: the centre of every room, `height` above its
+ * own floor. A seed has to stand in open air, so callers pass the height a
+ * player's eyes or chest would be at, not the floor itself.
+ */
+export function roomSeeds(rooms: readonly PlacedRoom[], height: number): Vec3[] {
+  return rooms.map((r): Vec3 => [
+    (r.bounds.min[0]! + r.bounds.max[0]!) / 2,
+    (r.bounds.min[1]! + r.bounds.max[1]!) / 2,
+    r.floorZ + height,
+  ])
+}
 
 /** How far past the outermost geometry the "outside" shell sits. */
 const PAD = 128

@@ -8,7 +8,7 @@ import type { Passage, PlacedRoom } from '../src/solve'
 import { toSolids } from '../src/solids'
 import { CARDINALS, Direction } from '../src/types'
 import type { Solid, Vec3 } from '../src/types'
-import { analyseSeal } from './support/seal'
+import { analyseSeal, roomSeeds } from './support/seal'
 import { solidSpanAt, wedgeSurfaceAt } from './support/wedge'
 
 /**
@@ -281,12 +281,7 @@ test('the playable space is sealed: nothing reachable from a room centre gets ou
   // the ramp into aSite, open to the void under that room's raised floor. The
   // flood fill in ./support/seal walks every connected pocket of air instead.
   // The matrix in seal.test.ts covers the layouts the example doesn't.
-  const seeds: Vec3[] = layout.rooms.map((room) => {
-    const [cx, cy] = centre(room)
-    return [cx, cy, room.floorZ + PLAYER_HEIGHT]
-  })
-
-  const analysis = analyseSeal(solids, seeds)
+  const analysis = analyseSeal(solids, roomSeeds(layout.rooms, PLAYER_HEIGHT))
   expect(analysis.leak).toBeNull()
 
   // The specific point the final review escaped through: beside the mid→aSite

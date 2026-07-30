@@ -5,7 +5,7 @@ import { solve } from '../src/solve'
 import { toSolids } from '../src/solids'
 import { CARDINALS, Direction, Transition } from '../src/types'
 import type { Cardinal, Vec3 } from '../src/types'
-import { analyseSeal } from './support/seal'
+import { analyseSeal, roomSeeds } from './support/seal'
 
 /**
  * The map may not leak. Not "the reference map may not leak" — *the map*, for
@@ -59,11 +59,7 @@ function twoRooms(c: Case): CS2Map {
 function checkSealed(map: CS2Map): string | null {
   const layout = solve(map.graph)
   const solids = toSolids(layout)
-  const seeds: Vec3[] = layout.rooms.map((r) => [
-    (r.bounds.min[0]! + r.bounds.max[0]!) / 2,
-    (r.bounds.min[1]! + r.bounds.max[1]!) / 2,
-    r.floorZ + 32,
-  ])
+  const seeds = roomSeeds(layout.rooms, 32)
 
   const analysis = analyseSeal(solids, [seeds[0]!])
   if (analysis.leak) {
