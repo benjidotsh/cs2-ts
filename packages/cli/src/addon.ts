@@ -22,8 +22,10 @@ export interface AddonPaths {
   /** Sources the compiler reads: the .vmap lives under `maps`. */
   content: string
   maps: string
-  /** Compiled output and addoninfo.txt, which is what CS2 itself loads. */
+  /** Compiled output, and the addoninfo.txt CS2 reads to load the addon. */
   game: string
+  gameMaps: string
+  addoninfo: string
 }
 
 /**
@@ -37,9 +39,12 @@ export function addonPaths(
 ): AddonPaths {
   assertSafeName('addon', addon)
   const content = join(install.root, 'content', 'csgo_addons', addon)
+  const game = join(install.root, 'game', 'csgo_addons', addon)
   return {
     content,
     maps: join(content, 'maps'),
-    game: join(install.root, 'game', 'csgo_addons', addon),
+    game,
+    gameMaps: join(game, 'maps'),
+    addoninfo: join(game, 'addoninfo.txt'),
   }
 }

@@ -130,7 +130,7 @@ export async function preflight(install: Cs2Install, addon?: string): Promise<vo
 
   if (!addon) return
 
-  const { content, game } = addonPaths(install, addon)
+  const { content, addoninfo } = addonPaths(install, addon)
   if (!(await exists(content))) {
     throw new PreflightError(
       `addon "${addon}" does not exist at ${content}.\n` +
@@ -142,10 +142,9 @@ export async function preflight(install: Cs2Install, addon?: string): Promise<vo
   // CS2 reads to load the addon at all. With only the content side present a
   // build compiles and reports success, and then launches into an addon the
   // game cannot see.
-  const info = join(game, 'addoninfo.txt')
-  if (!(await exists(info))) {
+  if (!(await exists(addoninfo))) {
     throw new PreflightError(
-      `addon "${addon}" has no addoninfo.txt at ${info}, so CS2 cannot load it.\n` +
+      `addon "${addon}" has no addoninfo.txt at ${addoninfo}, so CS2 cannot load it.\n` +
       `Recreate it with: cs2ts init ${addon}`,
     )
   }
