@@ -468,16 +468,30 @@ const roomBrushes = (room: PlacedRoom): Aabb => ({
  * A corridor's brushes likewise reach past `bounds`: a side wall
  * WALL_THICKNESS out on either side of the cross axis, and floor and ceiling
  * slabs SLAB_THICKNESS below and above (see corridorSolids).
+ *
+ * Two boxes, not one grown both ways. The side walls only span the corridor's
+ * own height, and the slabs only its own width, so a single box would also
+ * claim the four corner shells where those two expansions meet — and no brush
+ * is ever built there. Claiming them refuses legal, sealed layouts: a room
+ * tucked diagonally past a corridor's end, touching nothing.
  */
-function corridorBrushes(p: Passage): Aabb {
+function corridorBrushes(p: Passage): [Aabb, Aabb] {
   const other: 0 | 1 = p.axis === 0 ? 1 : 0
-  const min = [...p.bounds.min] as Vec3
-  const max = [...p.bounds.max] as Vec3
-  min[other] -= WALL_THICKNESS
-  max[other] += WALL_THICKNESS
-  min[2] -= SLAB_THICKNESS
-  max[2] += SLAB_THICKNESS
-  return { min, max }
+  const walls = {
+    min: [...p.bounds.min] as Vec3,
+    max: [...p.bounds.max] as Vec3,
+  }
+  walls.min[other] -= WALL_THICKNESS
+  walls.max[other] += WALL_THICKNESS
+
+  const slabs = {
+    min: [...p.bounds.min] as Vec3,
+    max: [...p.bounds.max] as Vec3,
+  }
+  slabs.min[2] -= SLAB_THICKNESS
+  slabs.max[2] += SLAB_THICKNESS
+
+  return [walls, slabs]
 }
 
 /**
@@ -523,7 +537,7 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
     const brushes = corridorBrushes(passage)
     for (const room of rooms) {
       if (room.id === passage.from || room.id === passage.to) continue
-      if (!aabbsOverlap(brushes, room.bounds) &&
+      if (!brushes.some((b) => aabbsOverlap(b, room.bounds)) &&
           !aabbsOverlap(passage.bounds, roomBrushes(room))) continue
       const [from, to] = between(passage)
       throw new SolverError(
@@ -549,8 +563,8 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
     for (let j = i + 1; j < corridors.length; j++) {
       const p = corridors[i]!, q = corridors[j]!
       if (sameRooms(p, q)) continue
-      if (!aabbsOverlap(corridorBrushes(p), q.bounds) &&
-          !aabbsOverlap(p.bounds, corridorBrushes(q))) continue
+      if (!corridorBrushes(p).some((b) => aabbsOverlap(b, q.bounds)) &&
+          !corridorBrushes(q).some((b) => aabbsOverlap(b, p.bounds))) continue
       const [pFrom, pTo] = between(p), [qFrom, qTo] = between(q)
       throw new SolverError(
         'OVERLAP',

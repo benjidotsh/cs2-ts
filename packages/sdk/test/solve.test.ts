@@ -241,6 +241,23 @@ test('a corridor grazing a room it does not connect is an overlap', () => {
   expect(error.detail.through).toBe('c')
 })
 
+test('a room tucked diagonally past a corridor is not an overlap', () => {
+  // The corridor's side walls reach out on the cross axis but only over the
+  // corridor's own height; its slabs reach above and below but only across its
+  // own width. Nothing is built in the four corners where those two expansions
+  // would meet, so a room whose interior lands only there must still build.
+  // Growing one box in both directions at once refused this.
+  const map = new CS2Map('de_diagonal')
+  const a = map.room({ name: 'a', size: [1024, 1024, 128] })
+  a.room({ name: 'b', size: [512, 1024, 256] },
+    { direction: Direction.East, width: 256, length: 512, offset: -512, rise: 192,
+      via: Transition.Ramp })
+  a.room({ name: 'c', size: [1024, 768, 128] },
+    { direction: Direction.East, width: 256, length: 256, offset: 256, rise: -128,
+      via: Transition.Stairs })
+  expect(() => solve(map.graph)).not.toThrow()
+})
+
 test('rooms stacked floor-on-ceiling overlap, because their slabs do', () => {
   // B's floor sits exactly on A's ceiling with the footprints overlapping.
   // Neither interior intrudes on the other, so this used to be accepted —
