@@ -582,12 +582,20 @@ test('stairs are held to a margin, and it only ever costs unwalkable corridors',
 // be. The carry term went negative there and read as though the far opening
 // removed air, refusing gaps hundreds of units clear.
 test('a cross edge shorter than a wall band is judged on its actual height', () => {
+  // The offsets matter: ∓260 off a 4096-wide parent leaves the two siblings 8
+  // units apart, which is the only way to get a run below WALL_THICKNESS —
+  // placement edges are refused below 32. An earlier version of this test used
+  // ∓512, giving a run of 512, and so never reached the clamp it is named for.
   const map = new CS2Map('t')
-  const a = map.room({ name: 'a', size: [2048, 512, 512] })
+  const a = map.room({ name: 'a', size: [4096, 512, 512] })
   const b = a.room({ name: 'b', size: [512, 512, 512] },
-    { direction: Direction.North, width: 128, length: 512, rise: 32, offset: -512 })
+    { direction: Direction.North, width: 128, length: 512, rise: 32, offset: -260 })
   const c = a.room({ name: 'c', size: [512, 512, 512] },
-    { direction: Direction.North, width: 128, length: 512, offset: 512 })
-  map.connect(b, c, { width: 128, via: Transition.Step, height: 512 })
-  expect(() => solve(map.graph)).not.toThrow()
+    { direction: Direction.North, width: 128, length: 512, offset: 260 })
+  map.connect(b, c, { width: 128, via: Transition.Step, height: 64 })
+
+  const layout = solve(map.graph)
+  const crossing = layout.passages.find((p) => p.from === b.id && p.to === c.id)!
+  expect(crossing.bounds.max[crossing.axis]! - crossing.bounds.min[crossing.axis]!)
+    .toBe(8)
 })
