@@ -43,6 +43,18 @@ export interface EmitOptions {
 }
 
 export async function emitMap(opts: EmitOptions): Promise<string> {
+  // An empty --out is a caller naming a file and getting it wrong, most often
+  // `--out "$OUT"` with the variable unset. `??` keeps '' — it is not nullish
+  // — so it used to shadow a perfectly good addon target and then report
+  // "nowhere to write", of a run that had been given somewhere to write.
+  // Whitespace alone is worse: it is truthy, and wrote a file named "   ".
+  if (opts.out !== undefined && opts.out.trim() === '') {
+    throw new Error(
+      'the output path was given but empty. Pass a path to --out, or drop it ' +
+      'and pass --addon <name> to write into an addon.',
+    )
+  }
+
   const map = await loadMap(opts.file)
   assertSafeName('map', map.graph.name)
   // Both names are checked here even though only one of them may go on to
@@ -50,7 +62,6 @@ export async function emitMap(opts: EmitOptions): Promise<string> {
   // a usable addon name" beats whatever failure the unused name would
   // eventually cause somewhere else.
   if (opts.addon !== undefined) assertSafeName('addon', opts.addon)
-  const text = buildVmap(map)
 
   const target = opts.out ?? (opts.install && opts.addon
     ? join(addonPaths(opts.install, opts.addon).maps, `${map.graph.name}.vmap`)
@@ -62,6 +73,10 @@ export async function emitMap(opts: EmitOptions): Promise<string> {
       'CS2 install present.',
     )
   }
+
+  // Built only once there is somewhere to put it: this is the expensive step,
+  // and "nowhere to write the .vmap" is knowable without it.
+  const text = buildVmap(map)
 
   await mkdir(dirname(target), { recursive: true })
   await writeFile(target, text)
