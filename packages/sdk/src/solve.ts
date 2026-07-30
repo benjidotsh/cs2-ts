@@ -161,12 +161,12 @@ interface CorridorEnd extends PassageEnd {
  */
 function corridorPinches(
   from: CorridorEnd, to: CorridorEnd, run: number, via: Transition,
-): boolean {
+): CorridorEnd | null {
   // Derived, not passed: the rise a caller would hand in is `to.z - from.z`
   // either way, and the two disagreeing would have the guard measure a climb
   // the geometry does not make.
   const height = Math.abs(to.z - from.z)
-  if (height === 0) return false
+  if (height === 0) return null
 
   // Only the lower end can pinch: its opening is the one capped below whatever
   // climbs over it. The higher end's opening rises along with the floor.
@@ -181,6 +181,7 @@ function corridorPinches(
   // A ramp climbs evenly, so only its share of the rise crosses the band.
   if (via === Transition.Ramp) {
     return lintel && clear <= Math.min(height, height * WALL_THICKNESS / run)
+      ? low : null
   }
 
   // A step keeps its floor low and lifts the whole rise at the far face, and
@@ -191,10 +192,10 @@ function corridorPinches(
   // a negative term would read as though the far opening *removed* air —
   // refusing gaps that are hundreds of units clear.
   const carry = Math.max(0, run - WALL_THICKNESS) / WALL_THICKNESS
-  if (clear + farClear * carry <= height) return true
+  if (clear + farClear * carry <= height) return low
   // At the shortest legal run the two bands abut, so the low room's lintel
   // meets the far room's sill with no corridor in between.
-  if (run <= 2 * WALL_THICKNESS && lintel && clear <= height) return true
+  if (run <= 2 * WALL_THICKNESS && lintel && clear <= height) return low
 
   // A tread lifts a whole riser while the roof has only sloped its share, so
   // however many treads start inside the band each cost one — plus a riser of
@@ -204,7 +205,7 @@ function corridorPinches(
   if (via === Transition.Stairs) {
     const treads = Math.ceil(WALL_THICKNESS * stairSteps(height) / run)
     const band = Math.min(height, STAIR_RISER * (treads + 1))
-    if (lintel && clear <= band) return true
+    if (lintel && clear <= band) return low
 
     // Neither end may be within a couple of risers of shutting. Below that the
     // treads meet the roof somewhere out along the run — past the band this
@@ -212,10 +213,10 @@ function corridorPinches(
     // connection — and the band-local view above cannot see it. Measured: the
     // two ways that happens need an end under 14 units of clear height, which
     // is a fifth of a standing player and no route in any case.
-    if (Math.min(clear, farClear) <= 2 * STAIR_RISER) return true
+    if (Math.min(clear, farClear) <= 2 * STAIR_RISER) return low
   }
 
-  return false
+  return null
 }
 
 /**
@@ -249,20 +250,19 @@ function passageCeilings(
     { ...from, ceilingZ: fromCeilingZ },
     { ...to, ceilingZ: toCeilingZ },
   ]
-  if (corridorPinches(ends[0], ends[1], run, via)) {
-    // The lower end is the one that pinches, so it is the one to quote.
-    const low = ends[0].z <= ends[1].z ? ends[0] : ends[1]
+  // The guard hands back the end it blames, so the message cannot come to
+  // quote a different one than the rule measured.
+  const pinched = corridorPinches(ends[0], ends[1], run, via)
+  if (pinched) {
+    const clear = pinched.ceilingZ - pinched.z
     throw new SolverError(
       'INSUFFICIENT_CLEARANCE',
-      `${what} has only ${low.ceilingZ - low.z} units of clear height at its ` +
-      `lower end to carry ${Math.abs(to.z - from.z)} units of climb, so the way ` +
-      'through pinches shut where it meets that room and the far room cannot be ' +
+      `${what} has only ${clear} units of clear height at its lower end to ` +
+      `carry ${Math.abs(to.z - from.z)} units of climb, so the way through ` +
+      'pinches shut where it meets that room and the far room cannot be ' +
       'reached. Raise the connection height, make the rooms taller, or give it ' +
       'more length to climb over.',
-      {
-        ...detail,
-        clear: low.ceilingZ - low.z, rise: to.z - from.z, run, via,
-      },
+      { ...detail, clear, rise: to.z - from.z, run, via },
     )
   }
   return [fromCeilingZ, toCeilingZ]
@@ -618,22 +618,26 @@ function corridorBrushes(p: Passage): [Aabb, Aabb] {
 }
 
 /**
- * Every test here weighs one thing's *brushes* against another thing's
- * interior, never bounds against bounds. Bounds describe the space a room or
- * corridor claims; the brushes are what actually gets built, and they stand
- * outside it. A shared face is not an overlap (see aabbsOverlap), so anything
- * that merely grazed its neighbour used to pass while the slab or wall it
- * emits landed squarely inside that neighbour's playable space.
+ * Bounds describe the space a room or corridor claims; the brushes are what
+ * actually gets built, and they stand outside it. A shared face is not an
+ * overlap (see aabbsOverlap), so anything weighed bounds-against-bounds could
+ * graze its neighbour and pass while the slab or wall it emits landed squarely
+ * inside that neighbour's playable space. Nothing here is weighed that way.
+ *
+ * Room against room goes further and weighs brushes against brushes, because
+ * two rooms can hold their interiors clear of each other while their slabs
+ * interpenetrate. Corridors do not: a corridor's side walls share the wall
+ * band with the rooms it joins by design, so those are weighed against
+ * interiors only.
  */
 function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
       const a = rooms[i]!, b = rooms[j]!
-      // Brushes against brushes here, not just against interiors: two rooms
-      // stacked 16 to 31 units apart keep their interiors clear of each other
-      // while their slabs coincide or interpenetrate, which is two visible
-      // surfaces fighting over the same plane. Only z is expanded, so flush
-      // neighbours — whose wall bands share a zone by design — are untouched.
+      // Two rooms stacked 16 to 31 units apart keep their interiors clear of
+      // each other while their slabs coincide or interpenetrate — two visible
+      // surfaces fighting over one plane. Only z is expanded, so flush
+      // neighbours are untouched.
       if (!aabbsOverlap(roomBrushes(a), roomBrushes(b))) continue
       const by = [0, 1, 2].map((k) =>
         overlap1d(a.bounds.min[k]!, a.bounds.max[k]!, b.bounds.min[k]!, b.bounds.max[k]!).size)

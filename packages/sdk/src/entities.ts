@@ -136,26 +136,31 @@ function brushEntity(
  * that zone by design — so a spawn measured against the bounds alone can end
  * up half-buried in a wall nothing else objects to.
  */
-function standableBounds(room: PlacedRoom, rooms: readonly PlacedRoom[]): Aabb {
+export function standableBounds(
+  room: PlacedRoom, rooms: readonly PlacedRoom[],
+): Aabb {
   const min: Vec3 = [...room.bounds.min]
   const max: Vec3 = [...room.bounds.max]
 
   for (const other of rooms) {
     if (other.id === room.id) continue
-    // Only a neighbour that meets this face and overlaps it in the other two
-    // axes puts a wall across the floor here.
+    // A neighbour only walls this room off where the two share height.
+    if (overlap1d(room.bounds.min[2]!, room.bounds.max[2]!,
+      other.bounds.min[2]!, other.bounds.max[2]!).size <= 0) continue
+
     for (const axis of [0, 1] as const) {
+      // ...and meet along a face, rather than merely touching at a corner.
       const cross: 0 | 1 = axis === 0 ? 1 : 0
       if (overlap1d(room.bounds.min[cross]!, room.bounds.max[cross]!,
         other.bounds.min[cross]!, other.bounds.max[cross]!).size <= 0) continue
-      if (overlap1d(room.bounds.min[2]!, room.bounds.max[2]!,
-        other.bounds.min[2]!, other.bounds.max[2]!).size <= 0) continue
 
+      // The inset is off this room's own face, so every neighbour on a given
+      // side arrives at the same answer.
       if (other.bounds.max[axis]! === room.bounds.min[axis]!) {
-        min[axis] = Math.max(min[axis]!, room.bounds.min[axis]! + WALL_THICKNESS)
+        min[axis] = room.bounds.min[axis]! + WALL_THICKNESS
       }
       if (other.bounds.min[axis]! === room.bounds.max[axis]!) {
-        max[axis] = Math.min(max[axis]!, room.bounds.max[axis]! - WALL_THICKNESS)
+        max[axis] = room.bounds.max[axis]! - WALL_THICKNESS
       }
     }
   }
@@ -165,8 +170,8 @@ function standableBounds(room: PlacedRoom, rooms: readonly PlacedRoom[]): Aabb {
 export function roomEntities(
   room: PlacedRoom,
   node: RoomNode,
-  /** Defaults to the room's own bounds, for a room standing on its own. */
-  standable: Aabb = room.bounds,
+  /** From standableBounds: the room's floor less any flush neighbour's wall. */
+  standable: Aabb,
 ): VmapEntity[] {
   const out: VmapEntity[] = []
 

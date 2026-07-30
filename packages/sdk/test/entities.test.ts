@@ -2,7 +2,9 @@ import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { SPAWN_FLOOR_CLEARANCE } from '../src/defaults'
-import { layoutEntities, resolvePlacement, roomEntities } from '../src/entities'
+import {
+  layoutEntities, resolvePlacement, roomEntities, standableBounds,
+} from '../src/entities'
 import { Align, Bombsite, Direction, Surface, Team, directionYaw } from '../src/types'
 import { AuthoringError } from '../src/errors'
 import { thrown } from './support/errors'
@@ -105,7 +107,7 @@ test('spawn origins sit a fixed clearance above the room floor, at several floor
   let checked = 0
   for (const node of map.graph.rooms) {
     const room = roomsById.get(node.id)!
-    const spawns = roomEntities(room, node).filter((e) => e.classname.startsWith('info_player_'))
+    const spawns = roomEntities(room, node, standableBounds(room, layout.rooms)).filter((e) => e.classname.startsWith('info_player_'))
     expect(spawns.length).toBeGreaterThan(0)
     for (const spawn of spawns) {
       expect(spawn.origin[2]).toBe(room.floorZ + SPAWN_FLOOR_CLEARANCE)
