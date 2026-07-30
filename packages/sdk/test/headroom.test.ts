@@ -1,5 +1,6 @@
 import { expect, test } from 'bun:test'
 import exampleMap from '../../../examples/de_example'
+import { PLAYER_HULL_HEIGHT } from '../src/defaults'
 import { Cs2tsError } from '../src/errors'
 import { CS2Map } from '../src/map'
 import { isCorridor, solve } from '../src/solve'
@@ -23,11 +24,10 @@ import { solidSpanAt } from './support/wedge'
  * pocket of air would fail here rather than pass on the gap alone.
  */
 
-/** CS2's standing player hull is 72 units tall. */
-const STANDING = 72
+const STANDING = PLAYER_HULL_HEIGHT
 
 const ROOM: Vec3 = [512, 512, 192]
-const VIAS = [Transition.Step, Transition.Ramp, Transition.Stairs]
+const VIAS = Object.values(Transition)
 const RISES = [64, 128, -64]
 const LENGTH = 256
 

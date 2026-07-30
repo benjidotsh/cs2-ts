@@ -5,7 +5,7 @@ import { CARDINALS, Direction, Transition } from '../src/types'
 import { SolverError } from '../src/errors'
 import { thrown } from './support/errors'
 
-function referenceMap() {
+function referenceMap(): CS2Map {
   const map = new CS2Map('de_example')
   const tSpawn = map.room({ name: 'tSpawn', size: [1024, 768, 192] })
   const mid = tSpawn.room({ name: 'mid', size: [1536, 1024, 256] },
@@ -15,14 +15,14 @@ function referenceMap() {
   const conn = tSpawn.room({ name: 'connector', size: [1024, 768, 192] },
     { direction: Direction.East, width: 192, length: 256 })
   map.connect(conn, aSite, { width: 192 })
-  return { map, tSpawn, mid, aSite, conn }
+  return map
 }
 
 const xy = (b: { min: number[]; max: number[] }) =>
   [[b.min[0], b.max[0]], [b.min[1], b.max[1]]]
 
 test('reference layout matches the spec worked example', () => {
-  const layout = solve(referenceMap().map.graph)
+  const layout = solve(referenceMap().graph)
   const byName = Object.fromEntries(layout.rooms.map((r) => [r.name, r]))
 
   expect(xy(byName.tSpawn!.bounds)).toEqual([[-512, 512], [-384, 384]])
@@ -40,7 +40,7 @@ test('reference layout matches the spec worked example', () => {
 })
 
 test('passages are centred on the overlap of the facing walls', () => {
-  const layout = solve(referenceMap().map.graph)
+  const layout = solve(referenceMap().graph)
   const find = (from: string, to: string) => {
     const ids = Object.fromEntries(layout.rooms.map((r) => [r.name, r.id]))
     return layout.passages.find(
@@ -55,7 +55,7 @@ test('passages are centred on the overlap of the facing walls', () => {
 })
 
 test('cross connection derives its rise rather than taking one', () => {
-  const layout = solve(referenceMap().map.graph)
+  const layout = solve(referenceMap().graph)
   const ids = Object.fromEntries(layout.rooms.map((r) => [r.name, r.id]))
   const p = layout.passages.find(
     (x) => x.from === ids.connector && x.to === ids.aSite)!

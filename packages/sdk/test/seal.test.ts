@@ -24,7 +24,7 @@ const ROOM: Vec3 = [512, 512, 192]
 /** Both rooms are 512 deep, so the shared face spans exactly 512 units. */
 const SPAN = 512
 
-const VIAS = [Transition.Step, Transition.Ramp, Transition.Stairs]
+const VIAS = Object.values(Transition)
 const RISES = [0, 64, 128, -64]
 const LENGTHS = [0, 32, 256]
 const WIDTHS = [192, SPAN]

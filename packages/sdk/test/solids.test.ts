@@ -179,7 +179,7 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
   const heights = [16, 64, 128, 192]
   const rises = [0, 32, 96]
   const lengths = [0, 256]
-  const transitions = [Transition.Step, Transition.Ramp, Transition.Stairs]
+  const transitions = Object.values(Transition)
 
   for (const size of sizes) {
     for (const width of widths) {
