@@ -126,6 +126,17 @@ function doorwayCeiling(
   return ceiling
 }
 
+/** One end of a way through: the floor it meets, and the room it opens into. */
+interface PassageEnd {
+  z: number
+  roomCeilingZ: number
+}
+
+interface CorridorEnd extends PassageEnd {
+  /** Top of the opening at this end. */
+  ceilingZ: number
+}
+
 /**
  * A corridor that climbs needs more headroom than the climb itself, or the
  * way through pinches shut and the room beyond it is unreachable — geometry
@@ -147,19 +158,13 @@ function doorwayCeiling(
  * explicit heights either side of each threshold, and unequal room heights —
  * this accepts nothing that seals. Step and ramp are exact in both directions.
  */
-interface CorridorEnd {
-  z: number
-  /** Top of the opening at this end. */
-  ceilingZ: number
-  /** The room's own ceiling, which is where its lintel stops. */
-  roomCeilingZ: number
-}
-
 function corridorPinches(
-  from: CorridorEnd, to: CorridorEnd,
-  rise: number, run: number, via: Transition,
+  from: CorridorEnd, to: CorridorEnd, run: number, via: Transition,
 ): boolean {
-  const height = Math.abs(rise)
+  // Derived, not passed: the rise a caller would hand in is `to.z - from.z`
+  // either way, and the two disagreeing would have the guard measure a climb
+  // the geometry does not make.
+  const height = Math.abs(to.z - from.z)
   if (height === 0) return false
 
   // Only the lower end can pinch: its opening is the one capped below whatever
@@ -213,23 +218,54 @@ function corridorPinches(
   return false
 }
 
-function assertCorridorClearance(
-  from: CorridorEnd, to: CorridorEnd,
-  rise: number, run: number, via: Transition,
+/**
+ * The opening height at each end of a way through, and the verdict on whether
+ * it can be walked.
+ *
+ * Both edge kinds end the same way — resolve the two ceilings, then build the
+ * passage — and the two used to spell it out separately, 80 lines apart under
+ * different names. Every change to what a passage's ends are had to be made
+ * twice, which is how the clearance guard came to be written into this code
+ * four times over.
+ */
+function passageCeilings(
+  from: PassageEnd, to: PassageEnd,
+  run: number, height: number | null, via: Transition,
   what: string, detail: Record<string, unknown>,
-): void {
-  if (!corridorPinches(from, to, rise, run, via)) return
+): [number, number] {
+  // A flush pair shares one ceiling, having no corridor of its own to bridge
+  // two heights with; anything with run carries its roof up with its floor.
+  if (run <= 0) {
+    const shared = doorwayCeiling(
+      from.roomCeilingZ, to.roomCeilingZ, Math.max(from.z, to.z),
+      height, what, detail)
+    return [shared, shared]
+  }
 
-  const low = from.z <= to.z ? from : to
-  throw new SolverError(
-    'INSUFFICIENT_CLEARANCE',
-    `${what} has only ${low.ceilingZ - low.z} units of clear height at its ` +
-    `lower end to carry ${Math.abs(rise)} units of climb, so the way through ` +
-    'pinches shut where it meets that room and the far room cannot be reached. ' +
-    'Raise the connection height, make the rooms taller, or give it more length ' +
-    'to climb over.',
-    { ...detail, clear: low.ceilingZ - low.z, rise, run, via },
-  )
+  const [fromCeilingZ, toCeilingZ] = corridorCeilings(
+    from.z, from.roomCeilingZ, to.z, to.roomCeilingZ, height)
+
+  const ends: [CorridorEnd, CorridorEnd] = [
+    { ...from, ceilingZ: fromCeilingZ },
+    { ...to, ceilingZ: toCeilingZ },
+  ]
+  if (corridorPinches(ends[0], ends[1], run, via)) {
+    // The lower end is the one that pinches, so it is the one to quote.
+    const low = ends[0].z <= ends[1].z ? ends[0] : ends[1]
+    throw new SolverError(
+      'INSUFFICIENT_CLEARANCE',
+      `${what} has only ${low.ceilingZ - low.z} units of clear height at its ` +
+      `lower end to carry ${Math.abs(to.z - from.z)} units of climb, so the way ` +
+      'through pinches shut where it meets that room and the far room cannot be ' +
+      'reached. Raise the connection height, make the rooms taller, or give it ' +
+      'more length to climb over.',
+      {
+        ...detail,
+        clear: low.ceilingZ - low.z, rise: to.z - from.z, run, via,
+      },
+    )
+  }
+  return [fromCeilingZ, toCeilingZ]
 }
 
 function assertPositiveWidth(
@@ -391,20 +427,10 @@ export function solve(graph: MapGraph): Layout {
     // two heights with. Everything after this is common ground: a flush
     // connection leaves `nearFace` on `parentFace`, so the same bounds come out
     // as the zero-thickness marker that tells toSolids where to cut.
-    let fromCeilingZ: number
-    let toCeilingZ: number
-    if (c.length > 0) {
-      [fromCeilingZ, toCeilingZ] = corridorCeilings(
-        parent.floorZ, parent.bounds.max[2]!, floorZ, childCeilingZ, c.height)
-      assertCorridorClearance(
-        { z: parent.floorZ, ceilingZ: fromCeilingZ, roomCeilingZ: parent.bounds.max[2]! },
-        { z: floorZ, ceilingZ: toCeilingZ, roomCeilingZ: childCeilingZ },
-        c.rise, c.length, c.via, what, detail)
-    } else {
-      fromCeilingZ = toCeilingZ = doorwayCeiling(
-        parent.bounds.max[2]!, childCeilingZ, Math.max(parent.floorZ, floorZ),
-        c.height, what, detail)
-    }
+    const [fromCeilingZ, toCeilingZ] = passageCeilings(
+      { z: parent.floorZ, roomCeilingZ: parent.bounds.max[2]! },
+      { z: floorZ, roomCeilingZ: childCeilingZ },
+      c.length, c.height, c.via, what, detail)
 
     const pMin: Vec3 = [0, 0, Math.min(parent.floorZ, floorZ)]
     const pMax: Vec3 = [0, 0, Math.max(fromCeilingZ, toCeilingZ)]
@@ -476,20 +502,10 @@ export function solve(graph: MapGraph): Layout {
       const loZ = Math.min(a.floorZ, b.floorZ)
       const hiZ = Math.max(a.floorZ, b.floorZ)
 
-      let aCeilingZ: number
-      let bCeilingZ: number
-      if (gapHi > gapLo) {
-        [aCeilingZ, bCeilingZ] = corridorCeilings(
-          a.floorZ, a.bounds.max[2]!, b.floorZ, b.bounds.max[2]!, edge.height)
-        assertCorridorClearance(
-          { z: a.floorZ, ceilingZ: aCeilingZ, roomCeilingZ: a.bounds.max[2]! },
-          { z: b.floorZ, ceilingZ: bCeilingZ, roomCeilingZ: b.bounds.max[2]! },
-          b.floorZ - a.floorZ, gapHi - gapLo, edge.via, what, detail)
-      } else {
-        aCeilingZ = doorwayCeiling(
-          a.bounds.max[2]!, b.bounds.max[2]!, hiZ, edge.height, what, detail)
-        bCeilingZ = aCeilingZ
-      }
+      const [aCeilingZ, bCeilingZ] = passageCeilings(
+        { z: a.floorZ, roomCeilingZ: a.bounds.max[2]! },
+        { z: b.floorZ, roomCeilingZ: b.bounds.max[2]! },
+        gapHi - gapLo, edge.height, edge.via, what, detail)
 
       const pMin: Vec3 = [0, 0, loZ]
       const pMax: Vec3 = [0, 0, Math.max(aCeilingZ, bCeilingZ)]
