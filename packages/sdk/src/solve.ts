@@ -613,8 +613,12 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
       const a = rooms[i]!, b = rooms[j]!
-      if (!aabbsOverlap(roomBrushes(a), b.bounds) &&
-          !aabbsOverlap(a.bounds, roomBrushes(b))) continue
+      // Brushes against brushes here, not just against interiors: two rooms
+      // stacked 16 to 31 units apart keep their interiors clear of each other
+      // while their slabs coincide or interpenetrate, which is two visible
+      // surfaces fighting over the same plane. Only z is expanded, so flush
+      // neighbours — whose wall bands share a zone by design — are untouched.
+      if (!aabbsOverlap(roomBrushes(a), roomBrushes(b))) continue
       const by = [0, 1, 2].map((k) =>
         overlap1d(a.bounds.min[k]!, a.bounds.max[k]!, b.bounds.min[k]!, b.bounds.max[k]!).size)
       throw new SolverError(
