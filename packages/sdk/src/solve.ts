@@ -180,9 +180,12 @@ function corridorPinches(
   // A step keeps its floor low and lifts the whole rise at the far face, and
   // stairs do the same thing a tread at a time. Either way the air has to
   // carry over the rise between the two ends' openings.
-  if (clear + farClear * (run - WALL_THICKNESS) / WALL_THICKNESS <= height) {
-    return true
-  }
+  //
+  // Clamped at zero because a cross edge can be shorter than a wall band, and
+  // a negative term would read as though the far opening *removed* air —
+  // refusing gaps that are hundreds of units clear.
+  const carry = Math.max(0, run - WALL_THICKNESS) / WALL_THICKNESS
+  if (clear + farClear * carry <= height) return true
   // At the shortest legal run the two bands abut, so the low room's lintel
   // meets the far room's sill with no corridor in between.
   if (run <= 2 * WALL_THICKNESS && lintel && clear <= height) return true
@@ -197,6 +200,14 @@ function corridorPinches(
       WALL_THICKNESS * Math.ceil(height / STAIR_RISER) / run)
     const band = Math.min(height, STAIR_RISER * (treads + 1))
     if (lintel && clear <= band) return true
+
+    // Neither end may be within a couple of risers of shutting. Below that the
+    // treads meet the roof somewhere out along the run — past the band this
+    // looks at, and with no lintel at all when the room is shorter than the
+    // connection — and the band-local view above cannot see it. Measured: the
+    // two ways that happens need an end under 14 units of clear height, which
+    // is a fifth of a standing player and no route in any case.
+    if (Math.min(clear, farClear) <= 2 * STAIR_RISER) return true
   }
 
   return false

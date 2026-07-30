@@ -483,11 +483,11 @@ test('corridors that are genuinely walkable are not refused', () => {
         { direction: Direction.East, width: 128, length: 32, rise: 64,
           via: Transition.Step })
     }],
-    ['a single flat tread climbs nothing inside the band', (m) => {
-      const a = m.room({ name: 'a', size: [512, 512, 192] })
-      a.room({ name: 'b', size: [512, 512, 192] },
-        { direction: Direction.East, width: 192, length: 32, rise: 8,
-          via: Transition.Stairs, height: 12 })
+    ['a normal flight of stairs between full-height rooms', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 256] })
+      a.room({ name: 'b', size: [512, 512, 256] },
+        { direction: Direction.East, width: 192, length: 256, rise: 64,
+          via: Transition.Stairs })
     }],
   ]
   for (const [name, build] of cases) {
@@ -545,4 +545,49 @@ test('corridors that seal shut are refused, whatever the transition', () => {
     expect(thrown(SolverError, () => solve(map.graph)).code, name)
       .toBe('INSUFFICIENT_CLEARANCE')
   }
+})
+
+// Stairs are refused with a margin the other two transitions do not need: a
+// flight can meet its own roof anywhere along the run, not just inside the
+// wall band the rest of the rule inspects, and where that happens depends on
+// how much the roof gains per tread. Rather than model it, both ends must
+// clear a couple of risers. The concession is that stairs holding a little
+// air are refused too — every such case measured under 32 units of it, which
+// is under half a crouching player and no route either way.
+test('stairs are held to a margin, and it only ever costs unwalkable corridors', () => {
+  const tooTight = (build: (m: CS2Map) => void) => {
+    const map = new CS2Map('t')
+    build(map)
+    return thrown(SolverError, () => solve(map.graph)).code
+  }
+  // 12 units of clear height carries 4 units of air — refused, deliberately.
+  expect(tooTight((m) => {
+    const a = m.room({ name: 'a', size: [512, 512, 192] })
+    a.room({ name: 'b', size: [512, 512, 192] },
+      { direction: Direction.East, width: 192, length: 32, rise: 8,
+        via: Transition.Stairs, height: 12 })
+  })).toBe('INSUFFICIENT_CLEARANCE')
+
+  // A room too short to stand in on either end of a flight, which is how the
+  // treads come to meet the roof out of sight of the wall band.
+  expect(tooTight((m) => {
+    const a = m.room({ name: 'a', size: [512, 512, 512] })
+    a.room({ name: 'b', size: [512, 512, 7] },
+      { direction: Direction.East, width: 128, length: 256, rise: 96,
+        via: Transition.Stairs, height: 17 })
+  })).toBe('INSUFFICIENT_CLEARANCE')
+})
+
+// A cross edge can be shorter than a wall band, which no placement edge may
+// be. The carry term went negative there and read as though the far opening
+// removed air, refusing gaps hundreds of units clear.
+test('a cross edge shorter than a wall band is judged on its actual height', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [2048, 512, 512] })
+  const b = a.room({ name: 'b', size: [512, 512, 512] },
+    { direction: Direction.North, width: 128, length: 512, rise: 32, offset: -512 })
+  const c = a.room({ name: 'c', size: [512, 512, 512] },
+    { direction: Direction.North, width: 128, length: 512, offset: 512 })
+  map.connect(b, c, { width: 128, via: Transition.Step, height: 512 })
+  expect(() => solve(map.graph)).not.toThrow()
 })
