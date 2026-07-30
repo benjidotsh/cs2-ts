@@ -92,34 +92,16 @@ function corridorCeilings(
 }
 
 /**
- * A way through needs clear height above the higher of the two floors it
- * joins. A corridor never rises above the lower of the two rooms' own
- * ceilings, so a rise that takes one room's floor up to (or past) the
- * other's ceiling leaves a doorway with no opening in it: geometry that
- * seals cleanly and is simply unreachable, which is the worst way for this
- * to fail.
- */
-function assertClearance(
-  ceiling: number,
-  floorTop: number,
-  what: string,
-  detail: Record<string, unknown>,
-): void {
-  if (ceiling > floorTop) return
-  throw new SolverError(
-    'INSUFFICIENT_CLEARANCE',
-    `${what} has no clear height: the way through tops out at ${ceiling}, at or ` +
-    `below the higher of the two floors (${floorTop}). Reduce the rise, make the ` +
-    'lower room taller, or raise the connection height.',
-    { ...detail, ceiling, floor: floorTop },
-  )
-}
-
-/**
  * Top of a flush doorway, shared by both of its sides. A doorway in a shared
  * wall has no roof of its own to bridge two heights with, so both sides get
  * the lower of the two ceilings. Cut the taller room's side any higher and it
  * looks out over the shorter room's ceiling slab into the void.
+ *
+ * Which also means it can run out of height altogether: a rise that takes one
+ * room's floor up to (or past) the other's ceiling leaves a doorway with no
+ * opening in it — geometry that seals cleanly and is simply unreachable, the
+ * worst way for this to fail. Only a flush doorway can hit this; a corridor
+ * carries its own roof up with its floor.
  */
 function doorwayCeiling(
   aRoomCeilingZ: number, bRoomCeilingZ: number, floorTop: number,
@@ -129,7 +111,16 @@ function doorwayCeiling(
   const ceiling = height != null
     ? Math.min(floorTop + height, roomsCeiling)
     : roomsCeiling
-  assertClearance(ceiling, floorTop, what, detail)
+
+  if (ceiling <= floorTop) {
+    throw new SolverError(
+      'INSUFFICIENT_CLEARANCE',
+      `${what} has no clear height: the way through tops out at ${ceiling}, at or ` +
+      `below the higher of the two floors (${floorTop}). Reduce the rise, make the ` +
+      'lower room taller, or raise the connection height.',
+      { ...detail, ceiling, floor: floorTop },
+    )
+  }
   return ceiling
 }
 

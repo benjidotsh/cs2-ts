@@ -231,8 +231,9 @@ export class CS2Map {
     // A room with a non-positive extent inverts its own bounds, and every
     // consumer downstream reads that as an empty span rather than an error:
     // subtractIntervals returns nothing for hi < lo, so the room emits its two
-    // slabs and *none of its four walls*, and the map leaks. Connection
-    // widths, heights and lengths are all checked; this was the gap.
+    // slabs and *none of its four walls*, and the map leaks. A connection's
+    // own numbers are checked, here and in the solver; the room's size was
+    // checked nowhere.
     if (!spec.size.every((n) => Number.isFinite(n) && n > 0)) {
       throw new AuthoringError(
         'INVALID_ROOM_SIZE',

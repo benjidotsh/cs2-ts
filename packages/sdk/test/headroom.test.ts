@@ -7,7 +7,7 @@ import type { Layout, Passage } from '../src/solve'
 import { toSolids } from '../src/solids'
 import { CARDINALS, Direction, Transition } from '../src/types'
 import type { Solid, Vec3 } from '../src/types'
-import { solidSpanAt, wedgeSurfaceAt } from './support/wedge'
+import { solidSpanAt } from './support/wedge'
 
 /**
  * A corridor that ramps its floor without ramping its ceiling pinches shut.
