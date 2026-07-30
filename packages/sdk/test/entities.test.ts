@@ -140,11 +140,37 @@ test('the same edge-anchored grid fits once shifted back inside the room', () =>
   expect(() => layoutEntities(solve(map.graph), map.graph)).not.toThrow()
 })
 
-test('a grid that exactly fits the room is not an error', () => {
+// A grid whose outermost origins land exactly on the room's bounds is NOT a
+// fit: the walls stand on those planes, so half of each 32-wide player hull is
+// buried in one. CS2 discards such a spawn exactly as it discards one coplanar
+// with the floor, and with 4 of 4 spawned that way the team has none left.
+test('a grid whose spawns stand in the wall plane is an error', () => {
   const map = new CS2Map('t')
   const a = map.room({ name: 'a', size: [256, 256, 192] })
   a.spawns(Team.CT, { count: 4, spacing: 256 })
+  expect(() => layoutEntities(solve(map.graph), map.graph)).toThrow(AuthoringError)
+})
+
+test('the same grid fits once the room can take the players standing in it', () => {
+  // 256 of spacing plus a hull's half-width at each end: 288 is the smallest
+  // room that holds it, and the fit check must not demand more than that.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [288, 288, 192] })
+  a.spawns(Team.CT, { count: 4, spacing: 256 })
   expect(() => layoutEntities(solve(map.graph), map.graph)).not.toThrow()
+})
+
+test('a room too short for a standing player is an error', () => {
+  // 16 units of floor clearance plus a 72-unit hull needs 88 of headroom.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 80] })
+  a.spawns(Team.T, { count: 1 })
+  expect(() => layoutEntities(solve(map.graph), map.graph)).toThrow(AuthoringError)
+
+  const map2 = new CS2Map('t2')
+  const b = map2.room({ name: 'b', size: [512, 512, 88] })
+  b.spawns(Team.T, { count: 1 })
+  expect(() => layoutEntities(solve(map2.graph), map2.graph)).not.toThrow()
 })
 
 test('a non-positive spawn count is an error, not a silent no-op', () => {

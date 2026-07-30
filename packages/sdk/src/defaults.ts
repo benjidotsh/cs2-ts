@@ -21,5 +21,15 @@ export const MAX_STEP_RISE = 64
  */
 export const SPAWN_FLOOR_CLEARANCE = 16
 
+/**
+ * CS2's standing player hull is 32 x 32 x 72, centred on the spawn's origin in
+ * x and y and rising from it in z. It has to fit in the room for the same
+ * reason the origin has to clear the floor: the engine's hull check reads an
+ * intersection with world geometry as stuck, discards the spawn, and a team
+ * with no valid spawns reports itself full.
+ */
+export const PLAYER_HULL_RADIUS = 16
+export const PLAYER_HULL_HEIGHT = 72
+
 /** Source's world extent: geometry beyond +/- this on any axis is not representable. */
 export const WORLD_LIMIT = 16384

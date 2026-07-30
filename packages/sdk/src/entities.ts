@@ -1,4 +1,6 @@
-import { MATERIALS, SPAWN_FLOOR_CLEARANCE } from './defaults'
+import {
+  MATERIALS, PLAYER_HULL_HEIGHT, PLAYER_HULL_RADIUS, SPAWN_FLOOR_CLEARANCE,
+} from './defaults'
 import { AuthoringError } from './errors'
 import type { MapGraph, RoomNode } from './map'
 import type { Layout, PlacedRoom } from './solve'
@@ -164,15 +166,22 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
     // or above its own ceiling, so that has to fail the same fit check.
     const spawnZ = origin[2] + SPAWN_FLOOR_CLEARANCE
 
+    // What has to fit is the player, not the origin. The walls stand at the
+    // room's bounds, so an origin exactly on that plane buries half a 32-wide
+    // hull in the wall — the same "stuck in geometry" rejection the floor
+    // clearance avoids, reached sideways. The grid is measured with a hull's
+    // half-width around it, and the standing height above it.
+    const r = PLAYER_HULL_RADIUS
     if (
-      gridMinX < room.bounds.min[0]! || gridMaxX > room.bounds.max[0]! ||
-      gridMinY < room.bounds.min[1]! || gridMaxY > room.bounds.max[1]! ||
-      spawnZ > room.bounds.max[2]!
+      gridMinX - r < room.bounds.min[0]! || gridMaxX + r > room.bounds.max[0]! ||
+      gridMinY - r < room.bounds.min[1]! || gridMaxY + r > room.bounds.max[1]! ||
+      spawnZ + PLAYER_HULL_HEIGHT > room.bounds.max[2]!
     ) {
       throw new AuthoringError(
         'SPAWN_GRID_TOO_LARGE',
-        `${req.count} spawns at ${req.spacing}u spacing in room "${room.name}" ` +
-        `span x:[${gridMinX},${gridMaxX}] y:[${gridMinY},${gridMaxY}] z:${spawnZ}, which ` +
+        `${req.count} spawns at ${req.spacing}u spacing in room "${room.name}" need ` +
+        `x:[${gridMinX - r},${gridMaxX + r}] y:[${gridMinY - r},${gridMaxY + r}] ` +
+        `z:[${spawnZ},${spawnZ + PLAYER_HULL_HEIGHT}] to stand in, which ` +
         `falls outside the room's bounds x:[${room.bounds.min[0]},${room.bounds.max[0]}] ` +
         `y:[${room.bounds.min[1]},${room.bounds.max[1]}] z:[${room.bounds.min[2]},${room.bounds.max[2]}]`,
         { room: room.name, count: req.count, spacing: req.spacing },
