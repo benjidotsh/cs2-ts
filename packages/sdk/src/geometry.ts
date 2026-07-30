@@ -1,7 +1,27 @@
-// The overlap tests the lowering pipeline runs on. Deliberately not in
+// The axis arithmetic the lowering pipeline runs on. Deliberately not in
 // `types.ts`: that module is re-exported wholesale from `index.ts`, and these
 // are how the pipeline does its job rather than part of the job's description.
-import type { Aabb } from './types'
+import { CARDINALS, Direction, type Aabb, type Cardinal } from './types'
+
+/**
+ * Travel axis (0=X, 1=Y) and which end of it each cardinal points toward.
+ *
+ * `solve` reads this forwards, turning a connection's direction into a face to
+ * place a room against; `toSolids` and the wedge builder read it backwards,
+ * through `cardinalOn`, to point a slope or mirror a wedge. Getting those two
+ * senses to disagree is the recurring bug in this pipeline, so the mapping is
+ * written down once and the reverse derived from it.
+ */
+export const AXIS: Record<Cardinal, { axis: 0 | 1; sign: 1 | -1 }> = {
+  [Direction.East]: { axis: 0, sign: 1 },
+  [Direction.West]: { axis: 0, sign: -1 },
+  [Direction.North]: { axis: 1, sign: 1 },
+  [Direction.South]: { axis: 1, sign: -1 },
+}
+
+/** The cardinal pointing along `axis`, toward its max end or its min end. */
+export const cardinalOn = (axis: 0 | 1, towardMax: boolean): Cardinal =>
+  CARDINALS.find((d) => AXIS[d].axis === axis && (AXIS[d].sign === 1) === towardMax)!
 
 /**
  * Intersection of two 1-D intervals. `size` is non-positive when they merely

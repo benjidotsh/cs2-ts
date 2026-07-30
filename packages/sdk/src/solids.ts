@@ -1,9 +1,9 @@
 import { MATERIALS, SLAB_THICKNESS, WALL_THICKNESS } from './defaults'
-import { overlap1d } from './geometry'
+import { cardinalOn, overlap1d } from './geometry'
 import { isCorridor, type Layout, type Passage, type PlacedRoom } from './solve'
 import {
-  Direction, Transition,
-  type Aabb, type BoxSolid, type Cardinal, type Solid, type Vec3, type WedgeSolid,
+  Transition,
+  type Aabb, type BoxSolid, type Solid, type Vec3, type WedgeSolid,
 } from './types'
 
 export interface Interval { lo: number; hi: number }
@@ -33,12 +33,6 @@ const footprint = (bounds: Aabb, zLo: number, zHi: number): [Vec3, Vec3] => [
   [bounds.min[0]!, bounds.min[1]!, zLo],
   [bounds.max[0]!, bounds.max[1]!, zHi],
 ]
-
-/** The cardinal a slope on `axis` climbs toward. */
-const rising = (axis: 0 | 1, towardMax: boolean): Cardinal =>
-  axis === 0
-    ? (towardMax ? Direction.East : Direction.West)
-    : (towardMax ? Direction.North : Direction.South)
 
 /**
  * One of a room's four vertical faces. Openings are registered against a face
@@ -163,7 +157,7 @@ function corridorSolids(passage: Passage): Solid[] {
     const [wedgeMin, wedgeMax] = footprint(bounds, lowZ, highZ)
     const wedge: WedgeSolid = {
       kind: 'wedge', min: wedgeMin, max: wedgeMax,
-      rise: rising(axis, risesTowardMax), material: MATERIALS.floor,
+      rise: cardinalOn(axis, risesTowardMax), material: MATERIALS.floor,
     }
     out.push(wedge)
   } else {
@@ -243,7 +237,7 @@ function corridorSolids(passage: Passage): Solid[] {
     const [wedgeMin, wedgeMax] = footprint(bounds, ceilLow, ceilHigh)
     out.push({
       kind: 'wedge', min: wedgeMin, max: wedgeMax,
-      rise: rising(axis, ceilAtMax > ceilAtMin),
+      rise: cardinalOn(axis, ceilAtMax > ceilAtMin),
       inverted: true, material: MATERIALS.ceiling,
     })
   }

@@ -1,8 +1,8 @@
 import { MAX_STEP_RISE, WALL_THICKNESS, WORLD_LIMIT } from './defaults'
 import { SolverError } from './errors'
 import type { CrossEdge, MapGraph, PlacementEdge, RoomNode } from './map'
-import { aabbsOverlap, overlap1d } from './geometry'
-import { Direction, Transition, type Aabb, type Cardinal, type Vec3 } from './types'
+import { AXIS, aabbsOverlap, overlap1d } from './geometry'
+import { Transition, type Aabb, type Vec3 } from './types'
 
 export interface PlacedRoom {
   id: number
@@ -56,14 +56,6 @@ export interface Layout {
  */
 export const isCorridor = (p: Passage): boolean =>
   p.bounds.max[p.axis]! > p.bounds.min[p.axis]!
-
-/** Travel axis (0=X, 1=Y) and sign for each cardinal. */
-const AXIS: Record<Cardinal, { axis: 0 | 1; sign: 1 | -1 }> = {
-  [Direction.East]: { axis: 0, sign: 1 },
-  [Direction.West]: { axis: 0, sign: -1 },
-  [Direction.North]: { axis: 1, sign: 1 },
-  [Direction.South]: { axis: 1, sign: -1 },
-}
 
 /**
  * Ceiling height at each end of a corridor, given each end's floor and the

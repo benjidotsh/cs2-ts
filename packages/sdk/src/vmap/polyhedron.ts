@@ -1,3 +1,4 @@
+import { AXIS, cardinalOn } from '../geometry'
 import { Direction, type Cardinal, type Solid, type Vec3 } from '../types'
 
 export interface Polyhedron {
@@ -25,12 +26,9 @@ export function boxPolyhedron(min: Vec3, max: Vec3): Polyhedron {
   }
 }
 
-const OPPOSITE: Record<Cardinal, Cardinal> = {
-  [Direction.East]: Direction.West,
-  [Direction.West]: Direction.East,
-  [Direction.North]: Direction.South,
-  [Direction.South]: Direction.North,
-}
+/** The cardinal facing the other way down the same axis. */
+const opposite = (d: Cardinal): Cardinal =>
+  cardinalOn(AXIS[d].axis, AXIS[d].sign === -1)
 
 /**
  * The vertical mirror of `wedgePolyhedron`: a flat top spanning the full
@@ -50,7 +48,7 @@ const OPPOSITE: Record<Cardinal, Cardinal> = {
 export function invertedWedgePolyhedron(
   min: Vec3, max: Vec3, rise: Cardinal,
 ): Polyhedron {
-  const upright = wedgePolyhedron(min, max, OPPOSITE[rise])
+  const upright = wedgePolyhedron(min, max, opposite(rise))
   const flip = min[2] + max[2]
   return {
     positions: upright.positions.map(([x, y, z]): Vec3 => [x, y, flip - z]),
