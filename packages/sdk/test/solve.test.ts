@@ -458,3 +458,53 @@ test('a layout that fits inside the world is not rejected', () => {
   }
   expect(() => solve(map.graph)).not.toThrow()
 })
+
+// The guard has to be tight as well as sound. Each of these is measurably
+// walkable — verified against the emitted brushes with the wedges
+// circumscribed, so "reachable" is a proof and not an approximation — and an
+// earlier, coarser version of the guard refused every one of them.
+test('corridors that are genuinely walkable are not refused', () => {
+  const cases: Array<[string, (m: CS2Map) => void]> = [
+    ['a step with run to spare needs only its roof to clear the band', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 192] })
+      a.room({ name: 'b', size: [512, 512, 192] },
+        { direction: Direction.East, width: 192, length: 256, rise: 64,
+          via: Transition.Step, height: 64 })
+    }],
+    ['only the lower end can pinch, so a short far room does not matter', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 512] })
+      a.room({ name: 'b', size: [512, 512, 32] },
+        { direction: Direction.East, width: 192, length: 32, rise: 64,
+          via: Transition.Step, height: 400 })
+    }],
+    ['no lintel over the low end means nothing to pinch against', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 64] })
+      a.room({ name: 'b', size: [512, 512, 256] },
+        { direction: Direction.East, width: 128, length: 32, rise: 64,
+          via: Transition.Step })
+    }],
+    ['a single flat tread climbs nothing inside the band', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 192] })
+      a.room({ name: 'b', size: [512, 512, 192] },
+        { direction: Direction.East, width: 192, length: 32, rise: 8,
+          via: Transition.Stairs, height: 12 })
+    }],
+  ]
+  for (const [name, build] of cases) {
+    const map = new CS2Map('t')
+    build(map)
+    expect(() => solve(map.graph), name).not.toThrow()
+  }
+})
+
+test('a flight of stairs needs a riser of headroom over its average slope', () => {
+  // Each tread lifts 8 in one go while the roof has only sloped up its share,
+  // so 16 of clear height over a 32-unit rise pinches at every tread edge —
+  // measured: one solid mass in the cross-section, and the far room sealed off.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 384] })
+  a.room({ name: 'b', size: [512, 512, 384] },
+    { direction: Direction.North, width: 128, length: 64, rise: 32,
+      via: Transition.Stairs, height: 16 })
+  expect(thrown(SolverError, () => solve(map.graph)).code).toBe('INSUFFICIENT_CLEARANCE')
+})
