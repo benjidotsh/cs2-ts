@@ -67,13 +67,24 @@ function faceTangent(normal: Vec3): Vec4 {
 
 const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
 
+/** One tile per 128 units, expressed the way Hammer expresses it. */
+const TEXTURE_SCALE = 1 / 128
+
 /**
- * Planar projection onto the face's tangent basis. One tile per 128 units.
- * Takes the basis rather than deriving it: both vectors are fixed for the whole
- * face, and this runs once per corner.
+ * Planar projection onto the face's texture axes.
+ *
+ * Hammer keeps `texcoord = (dot(P, axisU) * scaleU, dot(P, axisV) * scaleV)`
+ * exactly — verified digit for digit against the buyzone brush in Valve's own
+ * template_defuse.vmap — and the compiler reads the baked texcoords *and* the
+ * declared axes and scale. They therefore have to agree: the axes are what any
+ * later edit resnaps the surface from, so a face that disagrees with itself
+ * means one thing now and another the moment anything touches it.
+ *
+ * Takes the axes rather than deriving them: both are fixed for the whole face,
+ * and this runs once per corner.
  */
-function faceUv(position: Vec3, tangent: Vec3, bitangent: Vec3): Vec2 {
-  return [dot(position, tangent) / 128, dot(position, bitangent) / 128]
+function faceUv(position: Vec3, axisU: Vec3, axisV: Vec3): Vec2 {
+  return [dot(position, axisU) * TEXTURE_SCALE, dot(position, axisV) * TEXTURE_SCALE]
 }
 
 export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
@@ -135,19 +146,20 @@ export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
   faces.forEach((loop, f) => {
     const normal = faceNormal(positions, loop)
     const tangent = faceTangent(normal)
-    const t: Vec3 = [tangent[0], tangent[1], tangent[2]]
-    const b = cross(normal, t)
+    const axisU: Vec3 = [tangent[0], tangent[1], tangent[2]]
+    const b = cross(normal, axisU)
+    // V runs opposite the bitangent: Source's V axis points down the surface.
+    const axisV: Vec3 = [-b[0], -b[1], -b[2]]
 
     for (const h of faceLoops[f]!) {
       normals[h] = normal
       tangents[h] = tangent
-      texcoords[h] = faceUv(positions[destination[h]!]!, t, b)
+      texcoords[h] = faceUv(positions[destination[h]!]!, axisU, axisV)
     }
 
-    faceTextureScale.push([0.25, 0.25])
-    faceTextureAxisU.push([t[0], t[1], t[2], 0])
-    // V runs opposite the bitangent: Source's V axis points down the surface.
-    faceTextureAxisV.push([-b[0], -b[1], -b[2], 0])
+    faceTextureScale.push([TEXTURE_SCALE, TEXTURE_SCALE])
+    faceTextureAxisU.push([axisU[0], axisU[1], axisU[2], 0])
+    faceTextureAxisV.push([axisV[0], axisV[1], axisV[2], 0])
     faceLightmapScaleBias.push(0)
   })
 

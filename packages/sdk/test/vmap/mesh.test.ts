@@ -21,6 +21,42 @@ function newellNormal(positions: Vec3[], loop: number[]): Vec3 {
   return n
 }
 
+/**
+ * Hammer's own invariant, read off the buyzone brush in Valve's
+ * template_defuse.vmap: the baked texcoord of every corner is the vertex
+ * projected onto the face's declared texture axes and scaled by its declared
+ * scale. The compiler consumes both streams, so a face that disagrees with
+ * itself renders one way and resnaps another.
+ */
+test.each([
+  ['box', BOX],
+  ['wedge', wedgePolyhedron([0, 0, 0], [64, 128, 32], Direction.North)],
+  ['inverted wedge', invertedWedgePolyhedron([0, 0, 0], [64, 128, 32], Direction.East)],
+])('%s texcoords agree with the texture axes the face declares', (_name, poly) => {
+  const m = buildMesh(poly, 'm')
+  let checked = 0
+
+  for (let h = 0; h < m.edgeVertexIndices.length; h++) {
+    const f = m.edgeFaceIndices[h]!
+    const [scaleU, scaleV] = m.faceTextureScale[f]!
+    const u = m.faceTextureAxisU[f]!
+    const v = m.faceTextureAxisV[f]!
+    const p = m.positions[m.edgeVertexIndices[h]!]!
+    const got = m.texcoords[m.edgeVertexDataIndices[h]!]!
+
+    expect(got[0]).toBeCloseTo((p[0] * u[0] + p[1] * u[1] + p[2] * u[2]) * scaleU, 9)
+    expect(got[1]).toBeCloseTo((p[0] * v[0] + p[1] * v[1] + p[2] * v[2]) * scaleV, 9)
+    checked++
+  }
+
+  expect(checked).toBe(m.edgeVertexIndices.length)
+  // One tile per 128 units, however that is expressed.
+  for (const [su, sv] of m.faceTextureScale) {
+    expect(su).toBeCloseTo(1 / 128, 12)
+    expect(sv).toBeCloseTo(1 / 128, 12)
+  }
+})
+
 test('box polyhedron has 8 verts and 6 outward-wound faces', () => {
   expect(BOX.positions).toHaveLength(8)
   expect(BOX.faces).toEqual([
