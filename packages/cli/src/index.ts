@@ -22,6 +22,20 @@ const addonName = (value: string): string => {
   return value
 }
 
+/**
+ * A count, not a word. `Number` alone turns "high" into NaN, which then slips
+ * past `?? 1024` in compilerArgs — it is not nullish — and reaches the
+ * compiler as the literal argument "NaN", with the run still reported as a
+ * success.
+ */
+const positiveInt = (name: string) => (value: string): number => {
+  const n = Number(value)
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`--${name} takes a positive whole number, not "${value}"`)
+  }
+  return n
+}
+
 program.command('init')
   .description('scaffold a Counter-Strike 2 addon in the game install')
   .argument('<addon>', 'addon name to create in the CS2 install', addonName)
@@ -89,8 +103,8 @@ program.command('build')
   .argument('<file>', 'map definition module')
   .requiredOption('--addon <name>', 'addon to build into', addonName)
   .option('--cs2-dir <path>', 'path to the CS2 install')
-  .option('--lightmap-resolution <n>', 'max lightmap resolution', Number)
-  .option('--lightmap-quality <n>', 'VRAD3 quality', Number)
+  .option('--lightmap-resolution <n>', 'max lightmap resolution', positiveInt('lightmap-resolution'))
+  .option('--lightmap-quality <n>', 'VRAD3 quality', positiveInt('lightmap-quality'))
   .action(async (file: string, opts: BuildOptions) => {
     await buildAddonMap(file, 'production', opts)
   })
