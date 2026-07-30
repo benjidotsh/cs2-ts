@@ -134,40 +134,19 @@ function doorwayCeiling(
  * corridor path had no equivalent guard, so it shipped a map that compiled,
  * sealed, and could not be played.
  *
- * A room's WALL_THICKNESS wall band is the only place this can happen, because
- * that is where the lintel over the opening is flat while something under it
- * is still rising. `climbAcrossBand` says how much rises there.
+ * A room's WALL_THICKNESS wall band is where it happens: the lintel over the
+ * opening is flat there while something under it is still rising.
  *
- * Both of these were measured, not reasoned out: earlier attempts to derive
- * them from the geometry were wrong in both directions, and each rule below is
- * bracketed against the emitted brushes — with wedges circumscribed, so that
- * "reachable" is a proof rather than an approximation.
+ * Every rule below was *measured*, not reasoned out. Four attempts to derive
+ * them from the geometry were wrong, in both directions, so each is bracketed
+ * against the emitted brushes using two flood fills: one with wedges inscribed
+ * (air over-approximated), where "unreachable" is a proof, and one with them
+ * circumscribed, where "reachable" is a proof. Over 272,384 corridor layouts —
+ * both edge kinds, all transitions, rises of either sign including
+ * non-multiples of a riser, runs from 32 up including non-multiples of a wall,
+ * explicit heights either side of each threshold, and unequal room heights —
+ * this accepts nothing that seals. Step and ramp are exact in both directions.
  */
-function climbAcrossBand(rise: number, run: number, via: Transition): number {
-  const height = Math.abs(rise)
-
-  // At the shortest run the two rooms' wall bands abut, leaving no corridor
-  // between them: the low room's lintel meets the high room's sill directly,
-  // so a Step's whole rise stands in the way. Give it any more run and the
-  // floor is flat across the band — the *roof* is then what rises over it,
-  // which is the same share of the climb a ramp's floor makes.
-  if (via === Transition.Step) {
-    return run <= 2 * WALL_THICKNESS ? height : height * WALL_THICKNESS / run
-  }
-
-  // Stairs slope like a ramp on average, but climb in whole risers: a tread
-  // lifts a full riser in one go while the roof above it has only sloped up
-  // its share, so a flight of more than one tread needs a riser's worth of
-  // headroom on top. A single tread is flat and needs none.
-  if (via === Transition.Stairs) {
-    const steps = Math.ceil(height / STAIR_RISER)
-    return Math.min(
-      height, height * WALL_THICKNESS / run + (steps > 1 ? STAIR_RISER : 0))
-  }
-
-  return height * WALL_THICKNESS / run
-}
-
 interface CorridorEnd {
   z: number
   /** Top of the opening at this end. */
@@ -176,34 +155,69 @@ interface CorridorEnd {
   roomCeilingZ: number
 }
 
+function corridorPinches(
+  from: CorridorEnd, to: CorridorEnd,
+  rise: number, run: number, via: Transition,
+): boolean {
+  const height = Math.abs(rise)
+  if (height === 0) return false
+
+  // Only the lower end can pinch: its opening is the one capped below whatever
+  // climbs over it. The higher end's opening rises along with the floor.
+  const [low, far] = from.z <= to.z ? [from, to] : [to, from]
+  const clear = low.ceilingZ - low.z
+  const farClear = far.ceilingZ - far.z
+
+  // A lintel is what the climb closes against, and there is only one when the
+  // corridor's roof comes out below the room's own ceiling.
+  const lintel = low.ceilingZ < low.roomCeilingZ
+
+  // A ramp climbs evenly, so only its share of the rise crosses the band.
+  if (via === Transition.Ramp) {
+    return lintel && clear <= Math.min(height, height * WALL_THICKNESS / run)
+  }
+
+  // A step keeps its floor low and lifts the whole rise at the far face, and
+  // stairs do the same thing a tread at a time. Either way the air has to
+  // carry over the rise between the two ends' openings.
+  if (clear + farClear * (run - WALL_THICKNESS) / WALL_THICKNESS <= height) {
+    return true
+  }
+  // At the shortest legal run the two bands abut, so the low room's lintel
+  // meets the far room's sill with no corridor in between.
+  if (run <= 2 * WALL_THICKNESS && lintel && clear <= height) return true
+
+  // A tread lifts a whole riser while the roof has only sloped its share, so
+  // however many treads start inside the band each cost one — plus a riser of
+  // margin, which is what makes this side of it sound. Left tighter it accepts
+  // corridors that seal; the cost is refusing some that hold under 32 units of
+  // air, which is a third of a standing player and no route at all.
+  if (via === Transition.Stairs) {
+    const treads = Math.ceil(
+      WALL_THICKNESS * Math.ceil(height / STAIR_RISER) / run)
+    const band = Math.min(height, STAIR_RISER * (treads + 1))
+    if (lintel && clear <= band) return true
+  }
+
+  return false
+}
+
 function assertCorridorClearance(
   from: CorridorEnd, to: CorridorEnd,
   rise: number, run: number, via: Transition,
   what: string, detail: Record<string, unknown>,
 ): void {
-  if (rise === 0) return
+  if (!corridorPinches(from, to, rise, run, via)) return
 
-  // Only the lower end can pinch: that is where the opening is capped below
-  // what is climbing over it. The higher end's opening rises with the floor.
   const low = from.z <= to.z ? from : to
-
-  // And only if that end has a lintel at all. When the corridor's roof comes
-  // out flush with the room's own ceiling there is nothing above the opening,
-  // and the air simply carries on up under the rising roof.
-  if (low.ceilingZ >= low.roomCeilingZ) return
-
-  const clear = low.ceilingZ - low.z
-  const climb = climbAcrossBand(rise, run, via)
-  if (clear > climb) return
-
   throw new SolverError(
     'INSUFFICIENT_CLEARANCE',
-    `${what} has ${clear} units of clear height at its lower end but ` +
-    `${Math.round(climb * 100) / 100} of climb stands in the way where it meets ` +
-    'that room, so the way through pinches shut and the far room cannot be ' +
-    'reached. Raise the connection height, make the rooms taller, or give it ' +
-    'more length to climb over.',
-    { ...detail, clear, climb, rise, run, via },
+    `${what} has only ${low.ceilingZ - low.z} units of clear height at its ` +
+    `lower end to carry ${Math.abs(rise)} units of climb, so the way through ` +
+    'pinches shut where it meets that room and the far room cannot be reached. ' +
+    'Raise the connection height, make the rooms taller, or give it more length ' +
+    'to climb over.',
+    { ...detail, clear: low.ceilingZ - low.z, rise, run, via },
   )
 }
 

@@ -256,7 +256,7 @@ test('a step corridor with no headroom over its own climb is rejected', () => {
 
   const error = thrown(SolverError, () => solve(map.graph))
   expect(error.code).toBe('INSUFFICIENT_CLEARANCE')
-  expect(error.detail).toMatchObject({ clear: 64, climb: 64 })
+  expect(error.detail).toMatchObject({ clear: 64, rise: 64, run: 32 })
 })
 
 test('the same step is fine once the corridor is tall enough to climb it', () => {
@@ -507,4 +507,42 @@ test('a flight of stairs needs a riser of headroom over its average slope', () =
     { direction: Direction.North, width: 128, length: 64, rise: 32,
       via: Transition.Stairs, height: 16 })
   expect(thrown(SolverError, () => solve(map.graph)).code).toBe('INSUFFICIENT_CLEARANCE')
+})
+
+// Four corridors that seal shut and were accepted by earlier versions of the
+// clearance guard, each proved unreachable against the emitted brushes with the
+// wedges inscribed — so "unreachable" is a proof, not an approximation.
+test('corridors that seal shut are refused, whatever the transition', () => {
+  const sealed: Array<[string, (m: CS2Map) => void]> = [
+    ['a low room shorter than the step out of it, lintel or not', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 32] })
+      a.room({ name: 'b', size: [512, 512, 256] },
+        { direction: Direction.East, width: 128, length: 32, rise: 64,
+          via: Transition.Step })
+    }],
+    ['a step whose far end is the short room', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 192] })
+      a.room({ name: 'b', size: [512, 512, 16] },
+        { direction: Direction.East, width: 128, length: 48, rise: 64,
+          via: Transition.Step, height: 24 })
+    }],
+    ['a single stair tread, which lifts the whole rise at once', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 192] })
+      a.room({ name: 'b', size: [512, 512, 192] },
+        { direction: Direction.East, width: 128, length: 32, rise: 8,
+          via: Transition.Stairs, height: 8 })
+    }],
+    ['stairs with more than one tread inside the wall band', (m) => {
+      const a = m.room({ name: 'a', size: [512, 512, 256] })
+      a.room({ name: 'b', size: [512, 512, 256] },
+        { direction: Direction.East, width: 128, length: 63, rise: 25,
+          via: Transition.Stairs, height: 16 })
+    }],
+  ]
+  for (const [name, build] of sealed) {
+    const map = new CS2Map('t')
+    build(map)
+    expect(thrown(SolverError, () => solve(map.graph)).code, name)
+      .toBe('INSUFFICIENT_CLEARANCE')
+  }
 })
