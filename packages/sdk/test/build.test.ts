@@ -2,6 +2,7 @@ import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { boilerplateEntities, buildVmap } from '../src/build'
 import { solve } from '../src/solve'
+import { layoutEntities } from '../src/entities'
 import { Bombsite, Direction, Team } from '../src/types'
 import { example } from './support/example'
 
@@ -50,22 +51,20 @@ test('builds are byte-stable', () => {
   expect(buildVmap(example())).toBe(buildVmap(example()))
 })
 
-test('an authored buy zone overrides the injected one instead of doubling it', () => {
-  // The buy zone is injected from roomEntities, which build.ts labels
-  // "authored" — so the override rule structurally could not see a real
-  // authored func_buyzone, and the room came out with two overlapping zones.
+test('the working buy zone is injected even beside an authored one', () => {
+  // func_buyzone is @SolidClass, and Room.entity() only makes point entities,
+  // so an authored one has no volume and buys nothing. Treating it as an
+  // override — which it looks like it should be — would leave the room with
+  // the broken zone in place of the working one.
   const map = new CS2Map('de_bz')
   const t = map.room({ name: 'tSpawn', size: [1024, 768, 192] })
   t.spawns(Team.T, { count: 5 })
   t.entity('func_buyzone', {}, { TeamNum: 2 })
-  const text = buildVmap(map)
 
-  expect(text.split('"classname" "string" "func_buyzone"')).toHaveLength(2)
-  // And the injected one still arrives when the author writes none.
-  const plain = new CS2Map('de_bz2')
-  const t2 = plain.room({ name: 'tSpawn', size: [1024, 768, 192] })
-  t2.spawns(Team.T, { count: 5 })
-  expect(buildVmap(plain).split('"classname" "string" "func_buyzone"')).toHaveLength(2)
+  const zones = layoutEntities(solve(map.graph), map.graph)
+    .filter((e) => e.classname === 'func_buyzone')
+  expect(zones).toHaveLength(2)
+  expect(zones.filter((z) => z.solids?.length)).toHaveLength(1)
 })
 
 test('an authored boilerplate classname overrides injection instead of duplicating', () => {
