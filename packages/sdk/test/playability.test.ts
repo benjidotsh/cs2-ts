@@ -9,7 +9,7 @@ import { toSolids } from '../src/solids'
 import { CARDINALS, Direction } from '../src/types'
 import type { Solid, Vec3 } from '../src/types'
 import { analyseSeal } from './support/seal'
-import { wedgeSurfaceAt } from './support/wedge'
+import { solidSpanAt, wedgeSurfaceAt } from './support/wedge'
 
 /**
  * This is the substitute for the human walkthrough Task 17 hands off to a
@@ -36,14 +36,8 @@ const PLAYER_HEIGHT = 64
  * produces false "blocked" collisions a player would never actually hit.
  */
 function insideSolid(s: Solid, p: readonly [number, number, number]): boolean {
-  if (p[0] <= s.min[0]! || p[0] >= s.max[0]!) return false
-  if (p[1] <= s.min[1]! || p[1] >= s.max[1]!) return false
-  if (s.kind === 'box') return p[2] > s.min[2]! && p[2] < s.max[2]!
-  const slope = wedgeSurfaceAt(s, p[0], p[1])
-  // A ceiling wedge is solid above its slope, a ramp below it.
-  return s.inverted
-    ? p[2] > slope && p[2] < s.max[2]!
-    : p[2] > s.min[2]! && p[2] < slope
+  const span = solidSpanAt(s, p[0], p[1])
+  return span !== null && p[2] > span[0] && p[2] < span[1]
 }
 
 function insideAny(all: Solid[], p: readonly [number, number, number]): boolean {

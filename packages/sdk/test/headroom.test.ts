@@ -6,8 +6,8 @@ import { isCorridor, solve } from '../src/solve'
 import type { Layout, Passage } from '../src/solve'
 import { toSolids } from '../src/solids'
 import { CARDINALS, Direction, Transition } from '../src/types'
-import type { Cardinal, Solid, Vec3 } from '../src/types'
-import { wedgeSurfaceAt } from './support/wedge'
+import type { Solid, Vec3 } from '../src/types'
+import { solidSpanAt, wedgeSurfaceAt } from './support/wedge'
 
 /**
  * A corridor that ramps its floor without ramping its ceiling pinches shut.
@@ -35,11 +35,8 @@ const LENGTH = 256
 function solidSpansAt(all: Solid[], x: number, y: number): Array<[number, number]> {
   const raw: Array<[number, number]> = []
   for (const s of all) {
-    if (x <= s.min[0]! || x >= s.max[0]!) continue
-    if (y <= s.min[1]! || y >= s.max[1]!) continue
-    if (s.kind === 'box') raw.push([s.min[2]!, s.max[2]!])
-    else if (s.inverted) raw.push([wedgeSurfaceAt(s, x, y), s.max[2]!])
-    else raw.push([s.min[2]!, wedgeSurfaceAt(s, x, y)])
+    const span = solidSpanAt(s, x, y)
+    if (span !== null) raw.push(span)
   }
   raw.sort((a, b) => a[0] - b[0])
 
