@@ -9,7 +9,7 @@ import { toSolids } from '../src/solids'
 import { CARDINALS, Direction } from '../src/types'
 import type { Solid, Vec3 } from '../src/types'
 import { analyseSeal, roomSeeds } from './support/seal'
-import { solidSpanAt, wedgeSurfaceAt } from './support/wedge'
+import { solidSpanAt } from './support/wedge'
 
 /**
  * This is the substitute for the human walkthrough Task 17 hands off to a
@@ -57,11 +57,13 @@ function insideAny(all: Solid[], p: readonly [number, number, number]): boolean 
 function surfaceHeightAt(all: Solid[], x: number, y: number, ceilingCap: number): number | null {
   let best: number | null = null
   for (const s of all) {
-    if (x <= s.min[0]! || x >= s.max[0]!) continue
-    if (y <= s.min[1]! || y >= s.max[1]!) continue
     // An upside-down wedge is a ceiling; nothing stands on its underside.
     if (s.kind === 'wedge' && s.inverted) continue
-    const top = s.kind === 'box' ? s.max[2]! : wedgeSurfaceAt(s, x, y)
+    // Through solidSpanAt, so this oracle and insideSolid above read the wedge
+    // plane the same way: its top is the surface you would stand on.
+    const span = solidSpanAt(s, x, y)
+    if (span === null) continue
+    const top = span[1]
     if (top > ceilingCap + 1e-6) continue
     if (best === null || top > best) best = top
   }

@@ -1,14 +1,12 @@
-import { access } from 'node:fs/promises'
 import { dirname, resolve } from 'node:path'
 import { CS2Map } from '@cs2-ts/sdk'
+import { exists } from './install'
 
 /** Imports a user map module and returns its default-exported CS2Map. */
 export async function loadMap(file: string): Promise<CS2Map> {
   const absolute = resolve(file)
 
-  try {
-    await access(absolute)
-  } catch {
+  if (!(await exists(absolute))) {
     throw new Error(`no such map file: ${absolute}`)
   }
 
