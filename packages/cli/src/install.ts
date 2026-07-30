@@ -91,7 +91,21 @@ export async function findCs2Install(override?: string): Promise<Cs2Install> {
     // Through realpath, so that a relative path or a symlink into /mnt is
     // judged on where it actually leads. Left as given, `--cs2-dir root` is
     // told it "is not reachable from Windows" — of a directory that is.
-    return describe(await realpath(explicit))
+    const root = await realpath(explicit)
+
+    // Held to the same test discovery applies, rather than only "it exists".
+    // A typo'd directory, or a file, used to get all the way to preflight and
+    // be reported as "resourcecompiler.exe is missing … install the Workshop
+    // Tools" — sending the author to reinstall something they already have.
+    if (!(await hasTools(root))) {
+      throw new PreflightError(
+        `"${explicit}" is not a Counter-Strike 2 install: it has no ` +
+        `${join('game', 'bin', 'win64')} directory.\n` +
+        'Point --cs2-dir (or CS2TS_CS2_DIR) at the folder containing "game", ' +
+        'usually ...\\steamapps\\common\\Counter-Strike Global Offensive.',
+      )
+    }
+    return describe(root)
   }
 
   // Almost every install is at the default path, so it is checked on its own

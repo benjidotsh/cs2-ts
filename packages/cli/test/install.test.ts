@@ -57,7 +57,19 @@ test('findCs2Install wraps an override outside /mnt as a PreflightError', async 
   // under /mnt/<drive> — the classic "forgot the /mnt prefix" typo. This must
   // fail as PreflightError (not a bare Error from toWindowsPath) so the CLI
   // can catch one error type and print a clean message.
+  // It has to look like an install, or it is turned away earlier for not
+  // being one — which is a different message and a different complaint.
   const nativeDir = await mkdtemp(join(tmpdir(), 'cs2ts-native-'))
+  await mkdir(join(nativeDir, 'game', 'bin', 'win64'), { recursive: true })
   await expect(findCs2Install(nativeDir)).rejects.toThrow(PreflightError)
   await expect(findCs2Install(nativeDir)).rejects.toThrow(/not reachable from Windows/)
+})
+
+test('a --cs2-dir that is not a CS2 install says so, rather than blaming the tools', () => {
+  // Only "does it exist" was checked, so a typo'd directory reached preflight
+  // and came back as "resourcecompiler.exe is missing … install the Workshop
+  // Tools" — telling the author to reinstall something they already have.
+  const notAnInstall = mkdtemp(join(tmpdir(), 'cs2ts-notinstall-'))
+    .then((dir) => findCs2Install(dir))
+  expect(notAnInstall).rejects.toThrow(/is not a Counter-Strike 2 install/)
 })
