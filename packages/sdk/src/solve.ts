@@ -282,44 +282,35 @@ export function solve(graph: MapGraph): Layout {
     // (the parent) at the passage's min end.
     const fromAtMinEnd = sign === 1
 
+    // Flush rooms share one ceiling, having no corridor of their own to bridge
+    // two heights with. Everything after this is common ground: a flush
+    // connection leaves `nearFace` on `parentFace`, so the same bounds come out
+    // as the zero-thickness marker that tells toSolids where to cut.
+    let fromCeilingZ: number
+    let toCeilingZ: number
     if (c.length > 0) {
-      const [fromCeilingZ, toCeilingZ] = corridorCeilings(
+      [fromCeilingZ, toCeilingZ] = corridorCeilings(
         parent.floorZ, parent.bounds.max[2]!, floorZ, childCeilingZ, c.height)
-
-      const pMin: Vec3 = [0, 0, Math.min(parent.floorZ, floorZ)]
-      const pMax: Vec3 = [0, 0, Math.max(fromCeilingZ, toCeilingZ)]
-      pMin[axis] = Math.min(parentFace, nearFace)
-      pMax[axis] = Math.max(parentFace, nearFace)
-      pMin[other] = centre - c.width / 2
-      pMax[other] = centre + c.width / 2
-
-      passages.push({
-        from: parent.id, to: child.id,
-        bounds: { min: pMin, max: pMax },
-        axis, fromAtMinEnd,
-        fromZ: parent.floorZ, toZ: floorZ,
-        fromCeilingZ, toCeilingZ, via: c.via,
-      })
     } else {
-      // Flush rooms: a zero-thickness passage marks where to cut the openings.
-      const ceiling = doorwayCeiling(
+      fromCeilingZ = toCeilingZ = doorwayCeiling(
         parent.bounds.max[2]!, childCeilingZ, Math.max(parent.floorZ, floorZ),
         c.height, what, detail)
-
-      const pMin: Vec3 = [0, 0, Math.min(parent.floorZ, floorZ)]
-      const pMax: Vec3 = [0, 0, ceiling]
-      pMin[axis] = parentFace; pMax[axis] = parentFace
-      pMin[other] = centre - c.width / 2
-      pMax[other] = centre + c.width / 2
-
-      passages.push({
-        from: parent.id, to: child.id,
-        bounds: { min: pMin, max: pMax },
-        axis, fromAtMinEnd,
-        fromZ: parent.floorZ, toZ: floorZ,
-        fromCeilingZ: ceiling, toCeilingZ: ceiling, via: c.via,
-      })
     }
+
+    const pMin: Vec3 = [0, 0, Math.min(parent.floorZ, floorZ)]
+    const pMax: Vec3 = [0, 0, Math.max(fromCeilingZ, toCeilingZ)]
+    pMin[axis] = Math.min(parentFace, nearFace)
+    pMax[axis] = Math.max(parentFace, nearFace)
+    pMin[other] = centre - c.width / 2
+    pMax[other] = centre + c.width / 2
+
+    passages.push({
+      from: parent.id, to: child.id,
+      bounds: { min: pMin, max: pMax },
+      axis, fromAtMinEnd,
+      fromZ: parent.floorZ, toZ: floorZ,
+      fromCeilingZ, toCeilingZ, via: c.via,
+    })
   }
 
   function routeCrossEdge(edge: CrossEdge): void {
