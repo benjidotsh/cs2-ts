@@ -207,6 +207,19 @@ export class CS2Map {
   }
 
   private createRoom(spec: RoomSpec): Room {
+    // A room with a non-positive extent inverts its own bounds, and every
+    // consumer downstream reads that as an empty span rather than an error:
+    // subtractIntervals returns nothing for hi < lo, so the room emits its two
+    // slabs and *none of its four walls*, and the map leaks. Connection
+    // widths, heights and lengths are all checked; this was the gap.
+    if (!spec.size.every((n) => Number.isFinite(n) && n > 0)) {
+      throw new AuthoringError(
+        'INVALID_ROOM_SIZE',
+        `room "${spec.name}" has size ${spec.size.join(' x ')}; every side of a ` +
+        'room must be a finite number greater than 0',
+        { name: spec.name, size: spec.size },
+      )
+    }
     if (this.graph.rooms.some((r) => r.name === spec.name)) {
       throw new AuthoringError(
         'DUPLICATE_ROOM_NAME',

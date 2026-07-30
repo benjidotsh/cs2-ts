@@ -14,6 +14,7 @@ export type AuthoringErrorCode =
   | 'DIAGONAL_CONNECTION'
   | 'SPAWN_GRID_TOO_LARGE'
   | 'NEGATIVE_HEIGHT'
+  | 'INVALID_ROOM_SIZE'
 
 export class Cs2tsError extends Error {
   constructor(

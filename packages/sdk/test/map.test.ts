@@ -1,6 +1,7 @@
 import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { Align, Bombsite, Direction, Team, Transition } from '../src/types'
+import type { Vec3 } from '../src/types'
 import { AuthoringError } from '../src/errors'
 import { thrown } from './support/errors'
 
@@ -49,6 +50,36 @@ test('a rejected diagonal leaves no partial room in the graph', () => {
   const a = map.room({ name: 'a', size: [512, 512, 192] })
   expect(() => a.room({ name: 'b', size: [256, 256, 192] },
     { direction: Direction.NorthEast as never, width: 128, length: 0 })).toThrow()
+  expect(map.graph.rooms).toHaveLength(1)
+  expect(map.graph.placements).toHaveLength(0)
+})
+
+// A non-positive side inverts the room's bounds, and subtractIntervals reads
+// an inverted span as "nothing left to emit" — so the room came out with its
+// two slabs and none of its four walls, and the map leaked. It has to be
+// refused where the size is authored.
+const BAD_SIZES: Vec3[] = [
+  [512, 512, -192], [512, 0, 192], [-1, 512, 192], [512, 512, NaN],
+  [512, 512, Infinity],
+]
+
+test('a room with a non-positive or non-finite side is rejected', () => {
+  for (const size of BAD_SIZES) {
+    const map = new CS2Map('de_test')
+    const error = thrown(AuthoringError, () => map.room({ name: 'a', size }))
+    expect(error.code).toBe('INVALID_ROOM_SIZE')
+    expect(error.detail.size).toEqual(size)
+    // Rejected on the way in, so nothing half-made is left in the graph.
+    expect(map.graph.rooms).toHaveLength(0)
+  }
+})
+
+test('a child room is held to the same rule as the anchor', () => {
+  const map = new CS2Map('de_test')
+  const a = map.room({ name: 'a', size: [512, 512, 192] })
+  const error = thrown(AuthoringError, () => a.room({ name: 'b', size: [512, 512, 0] },
+    { direction: Direction.North, width: 128, length: 256 }))
+  expect(error.code).toBe('INVALID_ROOM_SIZE')
   expect(map.graph.rooms).toHaveLength(1)
   expect(map.graph.placements).toHaveLength(0)
 })
