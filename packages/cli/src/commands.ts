@@ -38,6 +38,11 @@ export interface EmitOptions {
 export async function emitMap(opts: EmitOptions): Promise<string> {
   const map = await loadMap(opts.file)
   assertSafeName('map', map.graph.name)
+  // Both names are checked here even though only one of them may go on to
+  // become a path: this is the boundary the names arrive at, and "that is not
+  // a usable addon name" beats whatever failure the unused name would
+  // eventually cause somewhere else.
+  if (opts.addon !== undefined) assertSafeName('addon', opts.addon)
   const text = buildVmap(map)
 
   const target = opts.out ?? (opts.install && opts.addon

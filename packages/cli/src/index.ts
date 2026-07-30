@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { basename } from 'node:path'
 import { Command } from 'commander'
+import { assertSafeName } from './addon'
 import { findCs2Install, preflight } from './install'
 import { emitMap, initAddon } from './commands'
 import { compileMap, launchMap, type Preset } from './compile'
@@ -11,9 +12,19 @@ const program = new Command()
   .description('Build Counter-Strike 2 maps from TypeScript')
   .version('0.1.0')
 
+/**
+ * Validate as commander parses, not once the action is under way: a bad addon
+ * name should be reported as a bad addon name, rather than as whatever the
+ * install search happens to fail with first.
+ */
+const addonName = (value: string): string => {
+  assertSafeName('addon', value)
+  return value
+}
+
 program.command('init')
   .description('scaffold a Counter-Strike 2 addon in the game install')
-  .argument('<addon>', 'addon name to create in the CS2 install')
+  .argument('<addon>', 'addon name to create in the CS2 install', addonName)
   .option('--cs2-dir <path>', 'path to the CS2 install')
   .action(async (addon: string, opts: { cs2Dir?: string }) => {
     const install = await findCs2Install(opts.cs2Dir)
@@ -26,7 +37,7 @@ program.command('emit')
   .description('write a .vmap without compiling it')
   .argument('<file>', 'map definition module')
   .option('--out <path>', 'write the .vmap here instead of into an addon')
-  .option('--addon <name>', 'addon to write into')
+  .option('--addon <name>', 'addon to write into', addonName)
   .option('--cs2-dir <path>', 'path to the CS2 install')
   .action(async (file: string, opts: { out?: string; addon?: string; cs2Dir?: string }) => {
     let install
@@ -66,7 +77,7 @@ async function buildAddonMap(file: string, preset: Preset, opts: BuildOptions) {
 program.command('preview')
   .description('fast compile, then launch CS2')
   .argument('<file>', 'map definition module')
-  .requiredOption('--addon <name>', 'addon to build into')
+  .requiredOption('--addon <name>', 'addon to build into', addonName)
   .option('--cs2-dir <path>', 'path to the CS2 install')
   .action(async (file: string, opts: { addon: string; cs2Dir?: string }) => {
     const { install, mapName } = await buildAddonMap(file, 'preview', opts)
@@ -76,7 +87,7 @@ program.command('preview')
 program.command('build')
   .description('full compile with vis, nav and baked lighting')
   .argument('<file>', 'map definition module')
-  .requiredOption('--addon <name>', 'addon to build into')
+  .requiredOption('--addon <name>', 'addon to build into', addonName)
   .option('--cs2-dir <path>', 'path to the CS2 install')
   .option('--lightmap-resolution <n>', 'max lightmap resolution', Number)
   .option('--lightmap-quality <n>', 'VRAD3 quality', Number)
