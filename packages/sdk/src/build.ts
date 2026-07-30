@@ -85,11 +85,7 @@ export function boilerplateEntities(layout: Layout): VmapEntity[] {
 export function buildVmap(map: CS2Map): string {
   const layout = solve(map.graph)
   const solids = toSolids(layout)
-  // Computed before the push, not inside it: the volume is a box around
-  // everything it is given, so feeding it a list it is already part of would
-  // grow it by another pad on every pass.
-  const lightmapVolume = lightmapVolumeSolid(solids)
-  solids.push(lightmapVolume)
+  solids.push(lightmapVolumeSolid(solids))
 
   // An explicitly authored classname is a deliberate override — skip
   // injecting the boilerplate version so e.g. a hand-authored

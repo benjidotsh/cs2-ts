@@ -1,4 +1,6 @@
-import { MATERIALS, SLAB_THICKNESS, STAIR_RISER, WALL_THICKNESS } from './defaults'
+import {
+  MATERIALS, SLAB_THICKNESS, STAIR_RISER, WALL_THICKNESS, stairSteps,
+} from './defaults'
 import { cardinalOn, overlap1d } from './geometry'
 import { isCorridor, type Layout, type Passage, type PlacedRoom } from './solve'
 import {
@@ -164,7 +166,7 @@ function corridorSolids(passage: Passage): Solid[] {
     // Stairs: 8-unit risers, tread depth divided evenly across the run. The
     // last riser is capped to `highZ` so a rise that isn't a multiple of 8
     // lands exactly on the upper floor instead of overshooting past it.
-    const steps = Math.ceil((highZ - lowZ) / STAIR_RISER)
+    const steps = stairSteps(highZ - lowZ)
     const tread = (axisMax - axisMin) / steps
     for (let i = 0; i < steps; i++) {
       const min: Vec3 = [0, 0, lowZ - SLAB_THICKNESS]

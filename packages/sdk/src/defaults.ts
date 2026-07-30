@@ -17,6 +17,14 @@ export const MAX_STEP_RISE = 64
 export const STAIR_RISER = 8
 
 /**
+ * How many treads a flight divides into. The lowering pass builds them and the
+ * solver's clearance guard reasons about where they land, so the division has
+ * to be one number: a guard fitted to a different one mis-predicts silently.
+ */
+export const stairSteps = (rise: number): number =>
+  Math.ceil(Math.abs(rise) / STAIR_RISER)
+
+/**
  * CS2 rejects a spawn point whose origin is coplanar with the floor it stands
  * on — the player hull check reads it as stuck in world geometry, the spawn is
  * discarded, and a team with no valid spawns reports itself full. Valve's own

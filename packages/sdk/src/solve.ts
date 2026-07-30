@@ -1,5 +1,6 @@
 import {
   MAX_STEP_RISE, SLAB_THICKNESS, STAIR_RISER, WALL_THICKNESS, WORLD_LIMIT,
+  stairSteps,
 } from './defaults'
 import { SolverError } from './errors'
 import type { CrossEdge, MapGraph, PlacementEdge, RoomNode } from './map'
@@ -201,8 +202,7 @@ function corridorPinches(
   // corridors that seal; the cost is refusing some that hold under 32 units of
   // air, which is a third of a standing player and no route at all.
   if (via === Transition.Stairs) {
-    const treads = Math.ceil(
-      WALL_THICKNESS * Math.ceil(height / STAIR_RISER) / run)
+    const treads = Math.ceil(WALL_THICKNESS * stairSteps(height) / run)
     const band = Math.min(height, STAIR_RISER * (treads + 1))
     if (lintel && clear <= band) return true
 
