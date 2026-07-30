@@ -1,7 +1,9 @@
 #!/usr/bin/env bun
-import { basename } from 'node:path'
+import { access } from 'node:fs/promises'
+import { basename, join } from 'node:path'
 import { Command } from 'commander'
 import { findCs2Install, preflight } from './install'
+import { addonPaths } from './addon'
 import { addonName, wholeNumber } from './options'
 import { emitMap, initAddon } from './commands'
 import { compileMap, launchMap, type Preset } from './compile'
@@ -63,7 +65,20 @@ async function buildAddonMap(file: string, preset: Preset, opts: BuildOptions) {
     lightmapVRadQuality: opts.lightmapQuality,
   })
 
+  // Exit 0 is not proof the compiler produced anything — it reports a failed
+  // resource and exits 0 all the same, which is why the integration tests read
+  // its output rather than its status. The .vpk is the artefact CS2 loads, so
+  // claiming success without one would send `preview` on to launch a map that
+  // was never built.
   const mapName = basename(written, '.vmap')
+  const vpk = join(addonPaths(install, opts.addon).gameMaps, `${mapName}.vpk`)
+  if (!(await access(vpk).then(() => true, () => false))) {
+    throw new Error(
+      `the compiler exited cleanly but wrote no ${mapName}.vpk to ${vpk}.\n` +
+      'Its output is above — look for "Failed loading resource" or an error ' +
+      'near the end for what it objected to.',
+    )
+  }
   console.log(`compiled ${mapName}`)
   return { install, mapName }
 }
