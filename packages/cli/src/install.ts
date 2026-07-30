@@ -74,6 +74,16 @@ async function steamLibraryRoots(): Promise<string[]> {
 
 export async function findCs2Install(override?: string): Promise<Cs2Install> {
   const explicit = override ?? process.env.CS2TS_CS2_DIR
+  // An empty value is a caller naming a directory and getting it wrong —
+  // `--cs2-dir "$CS2_DIR"` with the variable unset. `if (explicit)` alone
+  // would fall through to discovery and quietly build into whatever install
+  // happens to be on the machine, which is not the one they asked for.
+  if (explicit !== undefined && explicit.trim() === '') {
+    throw new PreflightError(
+      'the CS2 directory was given but empty. Pass a path to --cs2-dir, or ' +
+      'set CS2TS_CS2_DIR, or leave both unset to search for the install.',
+    )
+  }
   if (explicit) {
     if (!(await exists(explicit))) {
       throw new PreflightError(`CS2 directory "${explicit}" does not exist`)
