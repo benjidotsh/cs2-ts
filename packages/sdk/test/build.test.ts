@@ -50,6 +50,24 @@ test('builds are byte-stable', () => {
   expect(buildVmap(example())).toBe(buildVmap(example()))
 })
 
+test('an authored buy zone overrides the injected one instead of doubling it', () => {
+  // The buy zone is injected from roomEntities, which build.ts labels
+  // "authored" — so the override rule structurally could not see a real
+  // authored func_buyzone, and the room came out with two overlapping zones.
+  const map = new CS2Map('de_bz')
+  const t = map.room({ name: 'tSpawn', size: [1024, 768, 192] })
+  t.spawns(Team.T, { count: 5 })
+  t.entity('func_buyzone', {}, { TeamNum: 2 })
+  const text = buildVmap(map)
+
+  expect(text.split('"classname" "string" "func_buyzone"')).toHaveLength(2)
+  // And the injected one still arrives when the author writes none.
+  const plain = new CS2Map('de_bz2')
+  const t2 = plain.room({ name: 'tSpawn', size: [1024, 768, 192] })
+  t2.spawns(Team.T, { count: 5 })
+  expect(buildVmap(plain).split('"classname" "string" "func_buyzone"')).toHaveLength(2)
+})
+
 test('an authored boilerplate classname overrides injection instead of duplicating', () => {
   const map = new CS2Map('de_dedup')
   const t = map.room({ name: 'tSpawn', size: [1024, 768, 192] })

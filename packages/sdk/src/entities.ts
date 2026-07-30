@@ -235,7 +235,15 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
   // the same class as the sun and the sky, and a spawn room without one is a
   // spawn room whose team can never arm itself. One zone per room, covering
   // the room's whole interior, for the team that spawns there.
-  const teams = [...new Set(node.spawns.map((s) => s.team))]
+  //
+  // Unless the author wrote one here themselves, which is a deliberate
+  // override — the same rule build.ts applies to an authored
+  // light_environment. Without this the room got both, and two overlapping
+  // buy zones is not what anyone asked for.
+  const authored = new Set(node.entities.map((e) => e.classname))
+  const teams = authored.has('func_buyzone')
+    ? []
+    : [...new Set(node.spawns.map((s) => s.team))]
   for (const team of teams) {
     out.push(brushEntity(
       'func_buyzone',

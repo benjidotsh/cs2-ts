@@ -95,13 +95,18 @@ export function buildVmap(map: CS2Map): string {
   // injecting the boilerplate version so e.g. a hand-authored
   // light_environment doesn't end up doubled (two suns double the lighting
   // bake; two info_map_parameters is undefined behaviour).
-  const authored = layoutEntities(layout, map.graph)
-  const taken = new Set(authored.map((e) => e.classname))
+  //
+  // `taken` is read off the graph, not off the lowered entities: roomEntities
+  // injects buy zones of its own, and counting those as authored would let one
+  // injection pass quietly suppress another.
+  const entities = layoutEntities(layout, map.graph)
+  const taken = new Set(
+    map.graph.rooms.flatMap((r) => r.entities.map((e) => e.classname)))
   const injected = boilerplateEntities(layout).filter((e) => !taken.has(e.classname))
 
   return serializeVmap({
     name: layout.name,
     solids,
-    entities: [...authored, ...injected],
+    entities: [...entities, ...injected],
   })
 }
