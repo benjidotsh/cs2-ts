@@ -1,4 +1,6 @@
 import { expect, test } from 'bun:test'
+import { MAX_STEP_RISE, WALL_THICKNESS } from '../src/defaults'
+import { overlap1d } from '../src/geometry'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { subtractIntervals, toSolids } from '../src/solids'
@@ -17,10 +19,9 @@ function insideAny(solids: Solid[], p: readonly [number, number, number]): boole
 function overlapVolume(a: Solid, b: Solid): number {
   let v = 1
   for (let i = 0; i < 3; i++) {
-    const lo = Math.max(a.min[i]!, b.min[i]!)
-    const hi = Math.min(a.max[i]!, b.max[i]!)
-    if (hi <= lo) return 0
-    v *= hi - lo
+    const { size } = overlap1d(a.min[i]!, a.max[i]!, b.min[i]!, b.max[i]!)
+    if (size <= 0) return 0
+    v *= size
   }
   return v
 }
@@ -177,7 +178,7 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
               // solver (SLOPE_WITHOUT_RUN) — not a positive-volume concern.
               if (rise !== 0 && length === 0 && via !== Transition.Step) continue
               // Likewise a Step taller than a player can climb (RISE_CONFLICT).
-              if (via === Transition.Step && Math.abs(rise) > 64) continue
+              if (via === Transition.Step && Math.abs(rise) > MAX_STEP_RISE) continue
               const map = new CS2Map('t')
               const a = map.room({ name: 'a', size })
               a.room({ name: 'b', size }, {
@@ -201,9 +202,8 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
 test.each([...CARDINALS])(
   'the only overlapping solids are the corridor/room wall corners, facing %s',
   (direction) => {
-    const WALL = 16
     const CORRIDOR_HEIGHT = 192
-    const corner = WALL * WALL * CORRIDOR_HEIGHT
+    const corner = WALL_THICKNESS * WALL_THICKNESS * CORRIDOR_HEIGHT
 
     for (const length of [0, 32, 256]) {
       const map = new CS2Map('t')
