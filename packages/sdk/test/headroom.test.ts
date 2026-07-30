@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import exampleMap from '../../../examples/de_example'
 import { Cs2tsError } from '../src/errors'
 import { CS2Map } from '../src/map'
-import { solve } from '../src/solve'
+import { isCorridor, solve } from '../src/solve'
 import type { Layout, Passage } from '../src/solve'
 import { toSolids } from '../src/solids'
 import { Direction, Transition } from '../src/types'
@@ -91,8 +91,7 @@ function clearanceAlong(solids: Solid[], passage: Passage): Clearance {
 }
 
 function corridors(layout: Layout): Passage[] {
-  return layout.passages.filter(
-    (p) => p.bounds.max[p.axis]! > p.bounds.min[p.axis]!)
+  return layout.passages.filter(isCorridor)
 }
 
 test.each(DIRECTIONS)(

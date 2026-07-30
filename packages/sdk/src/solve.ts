@@ -48,6 +48,15 @@ export interface Layout {
   passages: Passage[]
 }
 
+/**
+ * True for a passage with a corridor of its own to build, false for the
+ * zero-thickness marker a flush doorway leaves behind — which only says where
+ * to cut the two rooms' walls. The difference is thickness along the travel
+ * axis, and nothing else.
+ */
+export const isCorridor = (p: Passage): boolean =>
+  p.bounds.max[p.axis]! > p.bounds.min[p.axis]!
+
 /** Travel axis (0=X, 1=Y) and sign for each cardinal. */
 const AXIS: Record<Cardinal, { axis: 0 | 1; sign: 1 | -1 }> = {
   [Direction.East]: { axis: 0, sign: 1 },
@@ -466,8 +475,7 @@ function detectOverlaps(
 
   // Zero-length passages are just doorway markers, with no volume of their own
   // to collide with anything.
-  const corridors = passages.filter(
-    (p) => p.bounds.max[p.axis]! > p.bounds.min[p.axis]!)
+  const corridors = passages.filter(isCorridor)
   const between = (p: Passage) => [nameOf(p.from), nameOf(p.to)]
 
   // A corridor may not drive through a room it does not connect.

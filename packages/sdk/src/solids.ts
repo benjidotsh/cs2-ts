@@ -1,6 +1,6 @@
 import { MATERIALS, SLAB_THICKNESS, WALL_THICKNESS } from './defaults'
 import { overlap1d } from './geometry'
-import type { Layout, Passage, PlacedRoom } from './solve'
+import { isCorridor, type Layout, type Passage, type PlacedRoom } from './solve'
 import {
   Direction, Transition,
   type Aabb, type BoxSolid, type Cardinal, type Solid, type Vec3, type WedgeSolid,
@@ -125,9 +125,7 @@ export function toSolids(layout: Layout): Solid[] {
     addOpening(to.id, toSide,
       { lo, hi, top: passage.toCeilingZ, bottom: bottomOf(to) })
 
-    if (passage.bounds.max[passage.axis]! > passage.bounds.min[passage.axis]!) {
-      solids.push(...corridorSolids(passage))
-    }
+    if (isCorridor(passage)) solids.push(...corridorSolids(passage))
   }
 
   // Each room's walls have to give way to every *other* room's slabs; see
