@@ -17,6 +17,11 @@ export enum Direction {
 export type Cardinal =
   | Direction.North | Direction.East | Direction.South | Direction.West
 
+/** The four of them, in compass order. */
+export const CARDINALS: readonly Cardinal[] = [
+  Direction.North, Direction.East, Direction.South, Direction.West,
+]
+
 export enum Surface {
   Floor = 'floor', Ceiling = 'ceiling',
   North = 'north', East = 'east', South = 'south', West = 'west',
@@ -71,12 +76,10 @@ export interface WedgeSolid {
 
 export type Solid = BoxSolid | WedgeSolid
 
-const CARDINALS = new Set<Direction>([
-  Direction.North, Direction.East, Direction.South, Direction.West,
-])
+const CARDINAL_SET = new Set<Direction>(CARDINALS)
 
 export function isCardinal(d: Direction): d is Cardinal {
-  return CARDINALS.has(d)
+  return CARDINAL_SET.has(d)
 }
 
 /** Yaw in degrees, counter-clockwise from +X, matching Source's qangle. */

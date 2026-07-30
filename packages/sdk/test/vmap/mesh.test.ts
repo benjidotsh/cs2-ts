@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { Direction, type Cardinal, type Vec3 } from '../../src/types'
+import { CARDINALS, Direction, type Vec3 } from '../../src/types'
 import {
   boxPolyhedron, invertedWedgePolyhedron, wedgePolyhedron,
 } from '../../src/vmap/polyhedron'
@@ -7,9 +7,6 @@ import { buildMesh } from '../../src/vmap/mesh'
 
 const BOX = boxPolyhedron([0, 0, 0], [64, 128, 32])
 
-const CARDINALS: Cardinal[] = [
-  Direction.North, Direction.East, Direction.South, Direction.West,
-]
 
 /** Newell's method — robust across the whole loop, not just one corner triple. */
 function newellNormal(positions: Vec3[], loop: number[]): Vec3 {
@@ -102,7 +99,7 @@ test('every half-edge is consistent with its twin, next and vertex', () => {
   }
 })
 
-test.each(CARDINALS)('wedge rising toward %s is closed and wound outward', (rise) => {
+test.each([...CARDINALS])('wedge rising toward %s is closed and wound outward', (rise) => {
   // Deliberately non-cubic so an axis swap would surface.
   const poly = wedgePolyhedron([0, 0, 0], [64, 96, 32], rise)
   const m = buildMesh(poly, 'm')
@@ -148,7 +145,7 @@ function assertWoundOutward(poly: { positions: Vec3[]; faces: number[][] }): voi
 // points inward, which compiles and renders as a hole. Checked with the same
 // rigour as the upright wedge above, in all four rise directions, because a
 // single orientation cannot see an axis swap or a sign error.
-test.each(CARDINALS)('inverted wedge rising toward %s is closed and wound outward', (rise) => {
+test.each([...CARDINALS])('inverted wedge rising toward %s is closed and wound outward', (rise) => {
   // Deliberately non-cubic, and off the origin so a mirror about the wrong
   // plane shows up as displaced geometry rather than as an accidental match.
   const min: Vec3 = [8, 16, 32]
@@ -181,7 +178,7 @@ test.each(CARDINALS)('inverted wedge rising toward %s is closed and wound outwar
   for (const p of low) expect(p[axis]).toBe(towardMax ? min[axis]! : max[axis]!)
 })
 
-test.each(CARDINALS)(
+test.each([...CARDINALS])(
   'an inverted wedge slopes on the same plane as the upright one, facing %s',
   (rise) => {
     // A ramp and the ceiling over it must climb in step, or the clearance

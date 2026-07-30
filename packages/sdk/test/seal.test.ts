@@ -3,7 +3,7 @@ import { Cs2tsError } from '../src/errors'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { toSolids } from '../src/solids'
-import { Direction, Transition } from '../src/types'
+import { CARDINALS, Direction, Transition } from '../src/types'
 import type { Cardinal, Vec3 } from '../src/types'
 import { analyseSeal } from './support/seal'
 
@@ -24,9 +24,6 @@ const ROOM: Vec3 = [512, 512, 192]
 /** Both rooms are 512 deep, so the shared face spans exactly 512 units. */
 const SPAN = 512
 
-const DIRECTIONS: Cardinal[] = [
-  Direction.North, Direction.East, Direction.South, Direction.West,
-]
 const VIAS = [Transition.Step, Transition.Ramp, Transition.Stairs]
 const RISES = [0, 64, 128, -64]
 const LENGTHS = [0, 32, 256]
@@ -95,7 +92,7 @@ const label = (c: Case) =>
   `${c.direction} ${c.via} rise=${c.rise} ` +
   `length=${c.length} width=${c.width}`
 
-for (const direction of DIRECTIONS) {
+for (const direction of CARDINALS) {
   for (const via of VIAS) {
     test(`no layout leaks: ${direction} via ${via}`, () => {
       const failures: string[] = []
@@ -172,7 +169,7 @@ test('stairs whose last tread is shallower than a wall stay sealed', () => {
   expect(checkSealed(map)).toBeNull()
 })
 
-test.each(DIRECTIONS)(
+test.each([...CARDINALS])(
   'a corridor climbing past the lower room\'s ceiling is sealed and reachable, facing %s',
   (direction) => {
     // The solver used to refuse this outright (INSUFFICIENT_CLEARANCE) because

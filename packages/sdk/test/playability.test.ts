@@ -6,7 +6,7 @@ import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import type { Passage, PlacedRoom } from '../src/solve'
 import { toSolids } from '../src/solids'
-import { Direction } from '../src/types'
+import { CARDINALS, Direction } from '../src/types'
 import type { Solid, Vec3 } from '../src/types'
 import { analyseSeal } from './support/seal'
 import { wedgeSurfaceAt } from './support/wedge'
@@ -185,7 +185,7 @@ test('every ramp or stair climbs monotonically from one floor to the other with 
 // invisible to the test above no matter how it samples, because the fixture
 // never places a room at the axis-max end. Covering all four cardinals here,
 // on a small synthetic map, is what actually exercises the failing quadrant.
-test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+test.each([...CARDINALS])(
   'a ramp climbs monotonically to the upper floor, facing %s',
   (direction) => {
     const map = new CS2Map('t')

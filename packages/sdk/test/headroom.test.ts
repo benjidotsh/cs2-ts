@@ -5,7 +5,7 @@ import { CS2Map } from '../src/map'
 import { isCorridor, solve } from '../src/solve'
 import type { Layout, Passage } from '../src/solve'
 import { toSolids } from '../src/solids'
-import { Direction, Transition } from '../src/types'
+import { CARDINALS, Direction, Transition } from '../src/types'
 import type { Cardinal, Solid, Vec3 } from '../src/types'
 import { wedgeSurfaceAt } from './support/wedge'
 
@@ -27,9 +27,6 @@ import { wedgeSurfaceAt } from './support/wedge'
 const STANDING = 72
 
 const ROOM: Vec3 = [512, 512, 192]
-const DIRECTIONS: Cardinal[] = [
-  Direction.North, Direction.East, Direction.South, Direction.West,
-]
 const VIAS = [Transition.Step, Transition.Ramp, Transition.Stairs]
 const RISES = [64, 128, -64]
 const LENGTH = 256
@@ -94,7 +91,7 @@ function corridors(layout: Layout): Passage[] {
   return layout.passages.filter(isCorridor)
 }
 
-test.each(DIRECTIONS)(
+test.each([...CARDINALS])(
   'a rise-bearing corridor keeps a standing player\'s clearance, facing %s',
   (direction) => {
     const failures: string[] = []

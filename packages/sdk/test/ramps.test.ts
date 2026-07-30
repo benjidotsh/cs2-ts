@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { toSolids } from '../src/solids'
-import { Direction, Transition } from '../src/types'
+import { CARDINALS, Direction, Transition } from '../src/types'
 
 function rampMap(via: Transition) {
   const map = new CS2Map('t')
@@ -48,7 +48,7 @@ test('the ceiling over a ramp climbs with it, on the same slope', () => {
 // all four cases. Under the pre-fix formula (`toZ > fromZ` alone, ignoring
 // which physical end `from` occupies), North and East happen to come out
 // right by coincidence — only South and West expose the sign error.
-test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+test.each([...CARDINALS])(
   'a ramp emits a wedge rising toward the higher room, direction %s',
   (direction) => {
     const map = new CS2Map('t')

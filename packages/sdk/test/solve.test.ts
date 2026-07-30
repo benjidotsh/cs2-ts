@@ -1,7 +1,7 @@
 import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
-import { Direction, Transition } from '../src/types'
+import { CARDINALS, Direction, Transition } from '../src/types'
 import { SolverError } from '../src/errors'
 import { thrown } from './support/errors'
 
@@ -164,7 +164,7 @@ test('a flush cross connection with no clear height above the higher floor is re
   expect(error.detail).toMatchObject({ a: 'ground', b: 'east' })
 })
 
-test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+test.each([...CARDINALS])(
   'a corridor may climb past the lower room\'s ceiling, facing %s',
   (direction) => {
     // 192 of rise between two 192-tall rooms: "b"'s floor sits exactly at

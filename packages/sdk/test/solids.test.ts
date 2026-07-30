@@ -2,7 +2,7 @@ import { expect, test } from 'bun:test'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { subtractIntervals, toSolids } from '../src/solids'
-import { Direction, Transition } from '../src/types'
+import { CARDINALS, Direction, Transition } from '../src/types'
 import type { Solid } from '../src/types'
 
 /** True if point `p` lies strictly inside any of the given axis-aligned solids. */
@@ -198,7 +198,7 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
 // avoid it hands a 16-unit zone to a wall that may not cover it, which is a
 // hole rather than merely untidy geometry. Asserting the exact set of
 // overlaps, not just a total, keeps this from quietly absorbing a new one.
-test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+test.each([...CARDINALS])(
   'the only overlapping solids are the corridor/room wall corners, facing %s',
   (direction) => {
     const WALL = 16
@@ -263,7 +263,7 @@ test('a low opening overlapping a taller one neither bricks it up nor duplicates
 // brushes interpenetrate wherever the band's height range straddles the slab.
 // Equal-height rooms never show it — the band ends exactly where the slabs
 // begin — which is why the sweep above missed it.
-test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
+test.each([...CARDINALS])(
   'a flush pair at different floor heights emits no overlapping brushes, facing %s',
   (direction) => {
     for (const rise of [48, 64, -64]) {
