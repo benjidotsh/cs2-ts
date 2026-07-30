@@ -581,21 +581,29 @@ test('stairs are held to a margin, and it only ever costs unwalkable corridors',
 // A cross edge can be shorter than a wall band, which no placement edge may
 // be. The carry term went negative there and read as though the far opening
 // removed air, refusing gaps hundreds of units clear.
-test('a cross edge shorter than a wall band is judged on its actual height', () => {
-  // The offsets matter: ∓260 off a 4096-wide parent leaves the two siblings 8
-  // units apart, which is the only way to get a run below WALL_THICKNESS —
-  // placement edges are refused below 32. An earlier version of this test used
-  // ∓512, giving a run of 512, and so never reached the clamp it is named for.
-  const map = new CS2Map('t')
-  const a = map.room({ name: 'a', size: [4096, 512, 512] })
-  const b = a.room({ name: 'b', size: [512, 512, 512] },
-    { direction: Direction.North, width: 128, length: 512, rise: 32, offset: -260 })
-  const c = a.room({ name: 'c', size: [512, 512, 512] },
-    { direction: Direction.North, width: 128, length: 512, offset: 260 })
-  map.connect(b, c, { width: 128, via: Transition.Step, height: 64 })
+// Each room builds its wall WALL_THICKNESS *outside* its own bounds, so two
+// rooms facing each other across less than that put a wall inside each other's
+// playable space. It seals and it compiles; a spawn there is simply buried in
+// the wall, which is the failure the hull clearance exists to prevent.
+test('rooms facing each other closer than a wall are rejected', () => {
+  const facing = (gap: number) => {
+    const map = new CS2Map('t')
+    const a = map.room({ name: 'A', size: [512, 512, 256] })
+    const c = a.room({ name: 'C', size: [512, 512, 256] },
+      { direction: Direction.North, width: 128, length: 0 })
+    a.room({ name: 'B', size: [512, 512, 256] },
+      { direction: Direction.East, width: 128, length: 0 })
+    c.room({ name: 'D', size: [512, 512, 256] },
+      { direction: Direction.East, width: 128, length: 0, offset: gap })
+    return map
+  }
 
-  const layout = solve(map.graph)
-  const crossing = layout.passages.find((p) => p.from === b.id && p.to === c.id)!
-  expect(crossing.bounds.max[crossing.axis]! - crossing.bounds.min[crossing.axis]!)
-    .toBe(8)
+  for (const gap of [1, 4, 8, 12, 15]) {
+    const error = thrown(SolverError, () => solve(facing(gap).graph))
+    expect(error.code, `gap ${gap}`).toBe('OVERLAP')
+    expect(error.message).toContain('face each other closer than')
+  }
+  // Flush is the shared wall, which is the design; a full wall apart is clear.
+  expect(() => solve(facing(0).graph)).not.toThrow()
+  expect(() => solve(facing(16).graph)).not.toThrow()
 })

@@ -190,9 +190,11 @@ function corridorPinches(
   // stairs do the same thing a tread at a time. Either way the air has to
   // carry over the rise between the two ends' openings.
   //
-  // Clamped at zero because a cross edge can be shorter than a wall band, and
-  // a negative term would read as though the far opening *removed* air —
-  // refusing gaps that are hundreds of units clear.
+  // Clamped at zero so the term cannot go negative and read as though the far
+  // opening *removed* air. facingTooClose now refuses the rooms that would
+  // produce a run this short, so nothing reaches it that way any more; it
+  // stays because the expression should be total on its own terms rather than
+  // by agreement with a rule two hundred lines away.
   const carry = Math.max(0, run - WALL_THICKNESS) / WALL_THICKNESS
   if (clear + farClear * carry <= height) return low
   // At the shortest legal run the two bands abut, so the low room's lintel
@@ -580,6 +582,35 @@ const roomBrushes = (room: PlacedRoom): Aabb => ({
 })
 
 /**
+ * Two rooms facing each other across less than a wall's width.
+ *
+ * Each lays its band WALL_THICKNESS *outside* its own bounds, so with a gap
+ * narrower than that the band comes out the far side and stands in the other
+ * room's playable space — a spawn there is buried in it, and the map still
+ * seals, so nothing downstream notices.
+ *
+ * Flush is not this: at a gap of zero the band is the shared wall, which is
+ * the design, and the spawn fit accounts for it. It is the near-miss that has
+ * no owner.
+ */
+function facingTooClose(a: PlacedRoom, b: PlacedRoom): boolean {
+  if (overlap1d(a.bounds.min[2]!, a.bounds.max[2]!,
+    b.bounds.min[2]!, b.bounds.max[2]!).size <= 0) return false
+
+  for (const axis of [0, 1] as const) {
+    const cross: 0 | 1 = axis === 0 ? 1 : 0
+    if (overlap1d(a.bounds.min[cross]!, a.bounds.max[cross]!,
+      b.bounds.min[cross]!, b.bounds.max[cross]!).size <= 0) continue
+
+    const gap = Math.max(
+      b.bounds.min[axis]! - a.bounds.max[axis]!,
+      a.bounds.min[axis]! - b.bounds.max[axis]!)
+    if (gap > 0 && gap < WALL_THICKNESS) return true
+  }
+  return false
+}
+
+/**
  * A corridor's brushes likewise reach past `bounds`: a side wall
  * WALL_THICKNESS out on either side of the cross axis, and floor and ceiling
  * slabs SLAB_THICKNESS below and above (see corridorSolids).
@@ -630,7 +661,8 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
       // each other while their slabs coincide or interpenetrate — two visible
       // surfaces fighting over one plane. Only z is expanded, so flush
       // neighbours are untouched.
-      if (!aabbsOverlap(roomBrushes(a), roomBrushes(b))) continue
+      const close = facingTooClose(a, b)
+      if (!close && !aabbsOverlap(roomBrushes(a), roomBrushes(b))) continue
       const by = [0, 1, 2].map((k) =>
         overlap1d(a.bounds.min[k]!, a.bounds.max[k]!, b.bounds.min[k]!, b.bounds.max[k]!).size)
       throw new SolverError(
@@ -638,12 +670,17 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
         // The interiors may be clear and only the slabs in conflict, in which
         // case one of `by` reads 0 and quoting it alone would look like a
         // contradiction. Say which of the two it is.
-        aabbsOverlap(a.bounds, b.bounds)
-          ? `rooms "${a.name}" and "${b.name}" overlap by ` +
-            `${by[0]} x ${by[1]} x ${by[2]} units`
-          : `rooms "${a.name}" and "${b.name}" do not overlap, but their floor and ` +
-            `ceiling slabs do: one sits within ${SLAB_THICKNESS} units of the other, ` +
-            'and each room lays a slab that thick outside its own floor and ceiling',
+        close
+          ? `rooms "${a.name}" and "${b.name}" face each other closer than the ` +
+            `${WALL_THICKNESS} units of wall they each build outwards, so each ` +
+            "one's wall comes out inside the other. Put them flush (a gap of 0) " +
+            `or at least ${WALL_THICKNESS} units apart`
+          : aabbsOverlap(a.bounds, b.bounds)
+            ? `rooms "${a.name}" and "${b.name}" overlap by ` +
+              `${by[0]} x ${by[1]} x ${by[2]} units`
+            : `rooms "${a.name}" and "${b.name}" do not overlap, but their floor and ` +
+              `ceiling slabs do: one sits within ${SLAB_THICKNESS} units of the other, ` +
+              'and each room lays a slab that thick outside its own floor and ceiling',
         { rooms: [a.name, b.name], overlap: by },
       )
     }
