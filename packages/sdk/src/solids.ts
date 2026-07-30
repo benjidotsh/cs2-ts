@@ -236,7 +236,7 @@ function corridorSolids(passage: Passage): Solid[] {
       min[other] = bounds.max[other]!
       max[other] = bounds.max[other]! + WALL_THICKNESS
     }
-    if (max[axis]! > min[axis]!) out.push(box(min, max, MATERIALS.wall))
+    out.push(box(min, max, MATERIALS.wall))
   }
 
   // The roof: a wedge hung upside down, its sloping underside carrying the
