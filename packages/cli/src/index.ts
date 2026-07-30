@@ -31,7 +31,11 @@ program.command('emit')
   .option('--cs2-dir <path>', 'path to the CS2 install')
   .action(async (file: string, opts: { out?: string; addon?: string; cs2Dir?: string }) => {
     let install
-    if (opts.addon) {
+    // --out wins outright in emitMap, so with one given the addon is never
+    // turned into a path. Looking the install up anyway made `emit --out x
+    // --addon nope` fail on an addon it was not going to write to, and
+    // demanded the Workshop Tools to produce a .vmap that needs none of them.
+    if (opts.addon && !opts.out) {
       install = await findCs2Install(opts.cs2Dir)
       await preflight(install, opts.addon)
     }
