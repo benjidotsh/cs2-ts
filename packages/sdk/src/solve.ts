@@ -191,10 +191,10 @@ function corridorPinches(
   // carry over the rise between the two ends' openings.
   //
   // Clamped at zero so the term cannot go negative and read as though the far
-  // opening *removed* air. facingTooClose now refuses the rooms that would
-  // produce a run this short, so nothing reaches it that way any more; it
-  // stays because the expression should be total on its own terms rather than
-  // by agreement with a rule two hundred lines away.
+  // opening *removed* air. Cross edges are routed before detectOverlaps runs,
+  // so a run this short still reaches here even though facingTooClose will
+  // refuse the layout a moment later — and without the clamp it would pre-empt
+  // that with a pinch error, which is the less useful of the two complaints.
   const carry = Math.max(0, run - WALL_THICKNESS) / WALL_THICKNESS
   if (clear + farClear * carry <= height) return low
   // At the shortest legal run the two bands abut, so the low room's lintel
@@ -657,11 +657,11 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
       const a = rooms[i]!, b = rooms[j]!
-      // Two rooms stacked 16 to 31 units apart keep their interiors clear of
-      // each other while their slabs coincide or interpenetrate — two visible
-      // surfaces fighting over one plane. Only z is expanded, so flush
-      // neighbours are untouched.
       const close = facingTooClose(a, b)
+      // roomBrushes catches the other near-miss: two rooms stacked 16 to 31
+      // units apart keep their interiors clear of each other while their slabs
+      // coincide or interpenetrate — two visible surfaces fighting over one
+      // plane. Only z is expanded there, so flush neighbours are untouched.
       if (!close && !aabbsOverlap(roomBrushes(a), roomBrushes(b))) continue
       const by = [0, 1, 2].map((k) =>
         overlap1d(a.bounds.min[k]!, a.bounds.max[k]!, b.bounds.min[k]!, b.bounds.max[k]!).size)
@@ -673,8 +673,9 @@ function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
         close
           ? `rooms "${a.name}" and "${b.name}" face each other closer than the ` +
             `${WALL_THICKNESS} units of wall they each build outwards, so each ` +
-            "one's wall comes out inside the other. Put them flush (a gap of 0) " +
-            `or at least ${WALL_THICKNESS} units apart`
+            "one's wall comes out inside the other. Put them flush (a gap of 0), " +
+            `or ${2 * WALL_THICKNESS} units apart, which is the first gap with ` +
+            'room for both walls'
           : aabbsOverlap(a.bounds, b.bounds)
             ? `rooms "${a.name}" and "${b.name}" overlap by ` +
               `${by[0]} x ${by[1]} x ${by[2]} units`
