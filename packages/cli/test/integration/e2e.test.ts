@@ -6,6 +6,9 @@ import { join } from 'node:path'
 // compiler is supposed to turn into meshes.
 import { solve } from '../../../sdk/src/solve'
 import { toSolids } from '../../../sdk/src/solids'
+import {
+  finalClusterCounts, unexpectedResourceFailures,
+} from '../../../sdk/test/support/compiler'
 import exampleMap from '../../../../examples/de_example'
 import { findCs2Install, preflight } from '../../src/install'
 import { initAddon, emitMap } from '../../src/commands'
@@ -14,24 +17,6 @@ import { toWindowsPath } from '../../src/paths'
 
 const enabled = process.env.CS2TS_INTEGRATION === '1'
 const ADDON = 'cs2ts_e2e'
-
-/**
- * Same reasoning as packages/sdk/test/integration/compile.test.ts, kept as a
- * local copy rather than imported so this file doesn't pull that one's own
- * top-level tests along with it. See that file for the full explanation of
- * why the last match (not the first) is the one that carries real counts,
- * and why "detail_prop_types.vdata_c" is excluded from resource failures.
- */
-function finalClusterCounts(stdout: string): { meshes: number; triangles: number } | null {
-  const matches = [...stdout.matchAll(/Building render clusters\.\.\. (\d+) meshes, (\d+) triangles/g)]
-  const last = matches.at(-1)
-  return last ? { meshes: Number(last[1]), triangles: Number(last[2]) } : null
-}
-
-function unexpectedResourceFailures(stdout: string): string[] {
-  const failures = stdout.match(/Failed loading resource "[^"]+"/g) ?? []
-  return failures.filter((f) => !f.includes('detail_prop_types.vdata_c'))
-}
 
 // This drives the CLI's own public surface end to end (install discovery,
 // preflight, init, emit, and the exact args `preview` builds) rather than
