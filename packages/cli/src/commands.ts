@@ -13,10 +13,14 @@ export async function initAddon(
 ): Promise<string> {
   const paths = addonPaths(install, addon)
 
-  await Promise.all([
-    mkdir(paths.maps, { recursive: true }),
-    mkdir(paths.gameMaps, { recursive: true }),
-  ])
+  // One at a time, not Promise.all: the content side is where init fails when
+  // something is already in the way (a *file* named after the addon, say), and
+  // running them together left the game side created by the sibling that had
+  // not lost the race. That half-made addon then got past preflight's content
+  // check and reported a missing addoninfo.txt, pointing at an `init` that
+  // could only fail the same way again.
+  await mkdir(paths.maps, { recursive: true })
+  await mkdir(paths.gameMaps, { recursive: true })
   // 'wx' rather than a plain write: re-running init on an existing addon used
   // to overwrite its addoninfo.txt, throwing away any Workshop metadata (a
   // title, tags) the author had added to it. Creating the addon is meant to

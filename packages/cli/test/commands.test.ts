@@ -1,5 +1,5 @@
 import { expect, test } from 'bun:test'
-import { mkdtemp, readFile, symlink } from 'node:fs/promises'
+import { mkdir, mkdtemp, readFile, symlink } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { initAddon, emitMap } from '../src/commands'
@@ -130,4 +130,18 @@ test('re-running init leaves an existing addoninfo.txt alone', async () => {
   // The directories are still ensured, so init stays idempotent otherwise.
   expect(await Bun.file(join(root, 'content', 'csgo_addons', 'keepme', 'maps', '.keep'))
     .exists()).toBe(true)
+})
+
+test('an init that cannot create the content side leaves nothing behind', async () => {
+  // The two mkdirs used to race in one Promise.all, so a failure on one left
+  // the other's directory created. That half-made addon then got past
+  // preflight's content check and complained about a missing addoninfo.txt,
+  // pointing at an `init` that could only fail the same way again.
+  const root = await mkdtemp(join(tmpdir(), 'cs2ts-halfinit-'))
+  await mkdir(join(root, 'content', 'csgo_addons'), { recursive: true })
+  await Bun.write(join(root, 'content', 'csgo_addons', 'filey'), '')
+
+  await expect(initAddon({ root }, 'filey')).rejects.toThrow()
+  expect(await Bun.file(join(root, 'game', 'csgo_addons', 'filey', 'addoninfo.txt'))
+    .exists()).toBe(false)
 })
