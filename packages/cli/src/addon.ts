@@ -13,8 +13,8 @@ export function assertSafeName(kind: 'map' | 'addon', name: string): void {
   if (SAFE_NAME.test(name)) return
   throw new Error(
     `"${name}" is not a usable ${kind} name. Use only letters, digits, underscores ` +
-    `and hyphens — a ${kind} name is a single path segment inside the CS2 install, ` +
-    'not a path.',
+    `and hyphens — ${kind} names are single path segments inside the CS2 install, ` +
+    'not paths.',
   )
 }
 

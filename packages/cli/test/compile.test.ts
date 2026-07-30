@@ -38,3 +38,11 @@ test('lighting settings are overridable', () => {
   expect(args.join(' ')).toContain('-lightmapMaxResolution 4096')
   expect(args.join(' ')).toContain('-lightmapVRadQuality 2')
 })
+
+test('a lightmap quality of 0 reaches the compiler as 0, not as the default', () => {
+  // `?? 1` and not `|| 1`: 0 is a real VRAD3 level, and the CLI now accepts it.
+  const args = compilerArgs('production', install, 'C:\\m.vmap',
+    { lightmapMaxResolution: 512, lightmapVRadQuality: 0 })
+  expect(args.join(' ')).toContain('-lightmapVRadQuality 0')
+  expect(args.join(' ')).toContain('-lightmapMaxResolution 512')
+})

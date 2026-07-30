@@ -11,6 +11,7 @@ import {
 } from '../../../sdk/test/support/compiler'
 import exampleMap from '../../../../examples/de_example'
 import { findCs2Install, preflight } from '../../src/install'
+import { addonPaths } from '../../src/addon'
 import { initAddon, emitMap } from '../../src/commands'
 import { compilerArgs } from '../../src/compile'
 import { toWindowsPath } from '../../src/paths'
@@ -31,6 +32,9 @@ test.if(enabled)('the reference example builds to a playable vpk through the CLI
   const install = await findCs2Install()
   await preflight(install)
   await initAddon(install, ADDON)
+  // Through addonPaths, like src does: this cleanup runs against the real CS2
+  // install, so a layout change must not leave it quietly deleting nothing.
+  const paths = addonPaths(install, ADDON)
 
   try {
     const written = await emitMap({
@@ -44,7 +48,7 @@ test.if(enabled)('the reference example builds to a playable vpk through the CLI
 
     expect(result.exitCode).toBe(0)
 
-    const vpk = join(install.root, 'game', 'csgo_addons', ADDON, 'maps', 'de_example.vpk')
+    const vpk = join(paths.gameMaps, 'de_example.vpk')
     expect(await Bun.file(vpk).exists()).toBe(true)
 
     const stdout = result.stdout.toString()
@@ -59,7 +63,6 @@ test.if(enabled)('the reference example builds to a playable vpk through the CLI
   } finally {
     // Runs even when an assertion throws, so a failing run doesn't leave a
     // scratch addon behind in the real CS2 install.
-    await $`rm -rf ${join(install.root, 'content', 'csgo_addons', ADDON)} \
-      ${join(install.root, 'game', 'csgo_addons', ADDON)}`
+    await $`rm -rf ${paths.content} ${paths.game}`
   }
 }, 600_000)

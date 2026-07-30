@@ -114,3 +114,20 @@ test('emit writes a vmap to an explicit --out path', async () => {
   const text = await readFile(out, 'utf8')
   expect(text.startsWith('<!-- dmx encoding keyvalues2 4 format vmap 40 -->')).toBe(true)
 })
+
+test('re-running init leaves an existing addoninfo.txt alone', async () => {
+  // It may carry Workshop metadata — a title, tags — that this file knows
+  // nothing about, and init rewriting it wholesale threw that away while
+  // reporting it had created something.
+  const root = await mkdtemp(join(tmpdir(), 'cs2ts-init-'))
+  await initAddon({ root }, 'keepme')
+  const info = join(root, 'game', 'csgo_addons', 'keepme', 'addoninfo.txt')
+  const mine = '"AddonInfo"\n{\n\t"IsPlayable"\t"1"\n\t"title"\t"My Map Pack"\n}\n'
+  await Bun.write(info, mine)
+
+  await initAddon({ root }, 'keepme')
+  expect(await Bun.file(info).text()).toBe(mine)
+  // The directories are still ensured, so init stays idempotent otherwise.
+  expect(await Bun.file(join(root, 'content', 'csgo_addons', 'keepme', 'maps', '.keep'))
+    .exists()).toBe(true)
+})

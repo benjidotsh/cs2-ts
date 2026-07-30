@@ -1,8 +1,9 @@
 import { expect, test } from 'bun:test'
-import { mkdtemp, mkdir, writeFile } from 'node:fs/promises'
+import { mkdtemp, mkdir, rm, writeFile } from 'node:fs/promises'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { PreflightError, findCs2Install, preflight } from '../src/install'
+import { initAddon } from '../src/commands'
 
 async function fakeInstall(withTools: boolean) {
   const root = await mkdtemp(join(tmpdir(), 'cs2ts-'))
@@ -35,6 +36,20 @@ test('preflight names the missing tool', async () => {
 test('preflight checks the addon exists when one is named', async () => {
   const install = await fakeInstall(true)
   await expect(preflight(install, 'nope')).rejects.toThrow(/cs2ts init nope/)
+  await expect(preflight(install, 'nope')).rejects.toThrow(/does not exist at/)
+})
+
+test('preflight checks the game side too, not just the content side', async () => {
+  // addoninfo.txt is what CS2 reads to load an addon at all. With only the
+  // content side present, a build used to compile, report success and launch
+  // CS2 into an addon the game cannot see. Both messages mention "cs2ts init",
+  // so this asserts on the half that tells the two apart.
+  const install = await fakeInstall(true)
+  await initAddon(install, 'halfaddon')
+  await preflight(install, 'halfaddon')
+
+  await rm(join(install.root, 'game', 'csgo_addons', 'halfaddon'), { recursive: true })
+  await expect(preflight(install, 'halfaddon')).rejects.toThrow(/no addoninfo\.txt/)
 })
 
 test('findCs2Install wraps an override outside /mnt as a PreflightError', async () => {

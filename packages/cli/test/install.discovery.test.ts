@@ -111,3 +111,14 @@ test('finding nothing anywhere reports "could not find" listing the searched pat
   )
   await expect(findCs2Install()).rejects.toThrow(DEFAULT_ROOT)
 })
+
+test('an empty CS2 directory is an error, not a licence to go looking', () => {
+  // `override ?? env` takes '' over the environment variable, and `if (explicit)`
+  // then skips it — so `--cs2-dir "$CS2_DIR"` with the variable unset used to
+  // fall through to discovery and build into whatever install was on the machine.
+  mockFs(new Set([DEFAULT_ROOT, join(DEFAULT_ROOT, 'game', 'bin', 'win64')]), new Map())
+
+  for (const empty of ['', '   ']) {
+    expect(findCs2Install(empty)).rejects.toThrow(/given but empty/)
+  }
+})
