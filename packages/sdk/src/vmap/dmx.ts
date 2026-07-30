@@ -4,7 +4,7 @@ export type DmxValue =
   | { kind: 'int'; value: number }
   | { kind: 'float'; value: number }
   | { kind: 'uint64'; value: string }
-  | { kind: 'vector3' | 'vector4' | 'qangle' | 'color'; value: number[] }
+  | { kind: 'vector3' | 'qangle' | 'color'; value: number[] }
   | { kind: 'element'; value: DmxElement | null }
   | { kind: 'element_array'; value: DmxElement[] }
   | { kind: 'int_array'; value: number[] }
@@ -53,8 +53,7 @@ function scalar(value: DmxValue): string | null {
     case 'int': return String(Math.trunc(value.value))
     case 'float': return formatFloat(value.value)
     case 'uint64': return value.value
-    case 'vector3': case 'vector4':
-    case 'qangle': case 'color':
+    case 'vector3': case 'qangle': case 'color':
       return vec(value.value)
     default: return null
   }

@@ -115,7 +115,6 @@ class Room {
   ) {}
 
   get name(): string { return this.node.name }
-  get size(): Vec3 { return this.node.size }
 
   /** Creates a room positioned relative to this one. */
   room(spec: RoomSpec, connection: Connection): Room {

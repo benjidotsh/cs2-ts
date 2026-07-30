@@ -52,15 +52,13 @@ type OpeningKey = `${number}:${Side}`
 
 const openingKey = (roomId: number, side: Side): OpeningKey => `${roomId}:${side}`
 
-/** A room's floor or ceiling slab: its whole footprint, with no openings in it. */
-interface Slab { min: Vec3; max: Vec3 }
-
 /**
- * The two slabs a room lays over its own footprint. Shared with the wall
+ * The two slabs a room lays over its own footprint — its floor and its ceiling,
+ * each spanning the whole footprint with no openings in it. Shared with the wall
  * emitter, which has to know where other rooms' slabs are, so the two views of
  * the same brush cannot drift apart.
  */
-function roomSlabs(room: PlacedRoom): [Slab, Slab] {
+function roomSlabs(room: PlacedRoom): [Aabb, Aabb] {
   const ceilingZ = room.bounds.max[2]!
   const [floorMin, floorMax] =
     footprint(room.bounds, room.floorZ - SLAB_THICKNESS, room.floorZ)
@@ -259,7 +257,7 @@ function corridorSolids(passage: Passage): Solid[] {
 }
 
 function roomSolids(
-  room: PlacedRoom, openings: Map<OpeningKey, Opening[]>, foreignSlabs: Slab[],
+  room: PlacedRoom, openings: Map<OpeningKey, Opening[]>, foreignSlabs: Aabb[],
 ): Solid[] {
   const { bounds, floorZ } = room
   const ceilingZ = bounds.max[2]!

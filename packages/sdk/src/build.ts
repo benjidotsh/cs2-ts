@@ -12,7 +12,7 @@ import { serializeVmap, type VmapEntity } from './vmap/document'
  * just room bounds), so enclosing the compiled geometry is structural rather
  * than a coincidence of wall thickness staying inside the padding.
  */
-export function lightmapVolumeSolid(solids: Solid[]): Solid {
+function lightmapVolumeSolid(solids: Solid[]): Solid {
   const min: Vec3 = [Infinity, Infinity, Infinity]
   const max: Vec3 = [-Infinity, -Infinity, -Infinity]
   for (const solid of solids) {
