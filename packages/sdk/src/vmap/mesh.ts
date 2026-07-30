@@ -65,12 +65,15 @@ function faceTangent(normal: Vec3): Vec4 {
   return [t[0], t[1], t[2], -1]
 }
 
-/** Planar projection onto the face's tangent basis. One tile per 128 units. */
-function faceUv(position: Vec3, normal: Vec3, tangent: Vec4): Vec2 {
-  const t: Vec3 = [tangent[0], tangent[1], tangent[2]]
-  const b = cross(normal, t)
-  const dot = (a: Vec3, c: Vec3) => a[0] * c[0] + a[1] * c[1] + a[2] * c[2]
-  return [dot(position, t) / 128, dot(position, b) / 128]
+const dot = (a: Vec3, b: Vec3): number => a[0] * b[0] + a[1] * b[1] + a[2] * b[2]
+
+/**
+ * Planar projection onto the face's tangent basis. One tile per 128 units.
+ * Takes the basis rather than deriving it: both vectors are fixed for the whole
+ * face, and this runs once per corner.
+ */
+function faceUv(position: Vec3, tangent: Vec3, bitangent: Vec3): Vec2 {
+  return [dot(position, tangent) / 128, dot(position, bitangent) / 128]
 }
 
 export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
@@ -78,9 +81,11 @@ export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
 
   // Allocate half-edges in twin pairs, in order of first appearance, so that
   // edgeDataIndices[h] === h >> 1 and edgeOppositeIndices[h] === h ^ 1.
-  const halfEdgeOf = new Map<string, number>()
+  const halfEdgeOf = new Map<number, number>()
   const destination: number[] = []
-  const key = (from: number, to: number) => `${from}>${to}`
+  // A numeric key over the vertex pair, rather than a template string: this
+  // runs twice per half-edge, which is the busiest loop in the build.
+  const key = (from: number, to: number) => from * positions.length + to
 
   const allocate = (from: number, to: number): number => {
     const existing = halfEdgeOf.get(key(from, to))
@@ -130,14 +135,15 @@ export function buildMesh(poly: Polyhedron, material: string): PolygonMesh {
   faces.forEach((loop, f) => {
     const normal = faceNormal(positions, loop)
     const tangent = faceTangent(normal)
+    const t: Vec3 = [tangent[0], tangent[1], tangent[2]]
+    const b = cross(normal, t)
+
     for (const h of faceLoops[f]!) {
       normals[h] = normal
       tangents[h] = tangent
-      texcoords[h] = faceUv(positions[destination[h]!]!, normal, tangent)
+      texcoords[h] = faceUv(positions[destination[h]!]!, t, b)
     }
 
-    const t: Vec3 = [tangent[0], tangent[1], tangent[2]]
-    const b = cross(normal, t)
     faceTextureScale.push([0.25, 0.25])
     faceTextureAxisU.push([t[0], t[1], t[2], 0])
     // V runs opposite the bitangent: Source's V axis points down the surface.
