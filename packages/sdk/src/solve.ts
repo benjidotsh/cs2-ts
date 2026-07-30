@@ -236,9 +236,8 @@ export function solve(graph: MapGraph): Layout {
   }
 
   const rooms = [...placed.values()]
-  const nameOf = (id: number) => byId.get(id)!.name
-  detectOverlaps(rooms, passages, nameOf)
-  checkWorldBounds(rooms, passages, nameOf)
+  detectOverlaps(rooms, passages)
+  checkWorldBounds(rooms, passages)
 
   return { name: graph.name, rooms, passages }
 
@@ -425,10 +424,9 @@ export function solve(graph: MapGraph): Layout {
  * represent geometry past +/-16384 on any axis, and a map that runs past it
  * fails in the compiler (or worse, silently) rather than here.
  */
-function checkWorldBounds(
-  rooms: PlacedRoom[], passages: Passage[], nameOf: (id: number) => string,
-): void {
+function checkWorldBounds(rooms: PlacedRoom[], passages: Passage[]): void {
   const AXES = ['x', 'y', 'z'] as const
+  const nameOf = new Map(rooms.map((r) => [r.id, r.name]))
 
   const check = (bounds: Aabb, what: string, detail: Record<string, unknown>) => {
     for (let k = 0; k < 3; k++) {
@@ -449,15 +447,13 @@ function checkWorldBounds(
     check(room.bounds, `room "${room.name}"`, { room: room.name })
   }
   for (const passage of passages) {
-    const from = nameOf(passage.from), to = nameOf(passage.to)
+    const from = nameOf.get(passage.from)!, to = nameOf.get(passage.to)!
     check(passage.bounds, `the corridor between "${from}" and "${to}"`,
       { rooms: [from, to] })
   }
 }
 
-function detectOverlaps(
-  rooms: PlacedRoom[], passages: Passage[], nameOf: (id: number) => string,
-): void {
+function detectOverlaps(rooms: PlacedRoom[], passages: Passage[]): void {
   for (let i = 0; i < rooms.length; i++) {
     for (let j = i + 1; j < rooms.length; j++) {
       const a = rooms[i]!, b = rooms[j]!
@@ -476,7 +472,8 @@ function detectOverlaps(
   // Zero-length passages are just doorway markers, with no volume of their own
   // to collide with anything.
   const corridors = passages.filter(isCorridor)
-  const between = (p: Passage) => [nameOf(p.from), nameOf(p.to)]
+  const nameOf = new Map(rooms.map((r) => [r.id, r.name]))
+  const between = (p: Passage) => [nameOf.get(p.from)!, nameOf.get(p.to)!]
 
   // A corridor may not drive through a room it does not connect.
   for (const passage of corridors) {
