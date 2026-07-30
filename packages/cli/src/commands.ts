@@ -17,9 +17,16 @@ export async function initAddon(
     mkdir(paths.maps, { recursive: true }),
     mkdir(join(paths.game, 'maps'), { recursive: true }),
   ])
+  // 'wx' rather than a plain write: re-running init on an existing addon used
+  // to overwrite its addoninfo.txt, throwing away any Workshop metadata (a
+  // title, tags) the author had added to it. Creating the addon is meant to
+  // be the idempotent part, not a reset.
   await Promise.all([
     writeFile(join(paths.maps, '.keep'), ''),
-    writeFile(join(paths.game, 'addoninfo.txt'), ADDONINFO),
+    writeFile(join(paths.game, 'addoninfo.txt'), ADDONINFO, { flag: 'wx' })
+      .catch((error: NodeJS.ErrnoException) => {
+        if (error.code !== 'EEXIST') throw error
+      }),
   ])
 
   return paths.content
