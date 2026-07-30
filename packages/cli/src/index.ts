@@ -23,15 +23,20 @@ const addonName = (value: string): string => {
 }
 
 /**
- * A count, not a word. `Number` alone turns "high" into NaN, which then slips
+ * A number, not a word. `Number` alone turns "high" into NaN, which then slips
  * past `?? 1024` in compilerArgs — it is not nullish — and reaches the
  * compiler as the literal argument "NaN", with the run still reported as a
  * success.
+ *
+ * The text is checked, not just the parsed value: `1e21` is an integer as far
+ * as Number.isInteger is concerned but stringifies back as "1e+21", which is
+ * the same kind of token this guard exists to keep off the command line.
  */
-const positiveInt = (name: string) => (value: string): number => {
+const wholeNumber = (name: string, min: number) => (value: string): number => {
   const n = Number(value)
-  if (!Number.isInteger(n) || n <= 0) {
-    throw new Error(`--${name} takes a positive whole number, not "${value}"`)
+  if (!/^\d+$/.test(value) || !Number.isSafeInteger(n) || n < min) {
+    throw new Error(
+      `--${name} takes a whole number of ${min} or more, not "${value}"`)
   }
   return n
 }
@@ -103,8 +108,8 @@ program.command('build')
   .argument('<file>', 'map definition module')
   .requiredOption('--addon <name>', 'addon to build into', addonName)
   .option('--cs2-dir <path>', 'path to the CS2 install')
-  .option('--lightmap-resolution <n>', 'max lightmap resolution', positiveInt('lightmap-resolution'))
-  .option('--lightmap-quality <n>', 'VRAD3 quality', positiveInt('lightmap-quality'))
+  .option('--lightmap-resolution <n>', 'max lightmap resolution', wholeNumber('lightmap-resolution', 1))
+  .option('--lightmap-quality <n>', 'VRAD3 quality (0, 1 or 2)', wholeNumber('lightmap-quality', 0))
   .action(async (file: string, opts: BuildOptions) => {
     await buildAddonMap(file, 'production', opts)
   })
