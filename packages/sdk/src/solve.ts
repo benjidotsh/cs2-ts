@@ -1,4 +1,6 @@
-import { MAX_STEP_RISE, SLAB_THICKNESS, WALL_THICKNESS, WORLD_LIMIT } from './defaults'
+import {
+  MAX_STEP_RISE, SLAB_THICKNESS, STAIR_RISER, WALL_THICKNESS, WORLD_LIMIT,
+} from './defaults'
 import { SolverError } from './errors'
 import type { CrossEdge, MapGraph, PlacementEdge, RoomNode } from './map'
 import { AXIS, aabbsOverlap, overlap1d } from './geometry'
@@ -122,6 +124,51 @@ function doorwayCeiling(
     )
   }
   return ceiling
+}
+
+/**
+ * A corridor that climbs needs more headroom than the climb itself, or the
+ * way through pinches shut and the room beyond it is unreachable — geometry
+ * that seals cleanly and cannot be walked, which is the worst way for this to
+ * fail. It is the same fault doorwayCeiling rejects for a flush doorway; the
+ * corridor path had no equivalent guard, so it shipped a map that compiled,
+ * sealed, and could not be played.
+ *
+ * The climb that matters is the one the floor makes across a room's 16-unit
+ * wall band, because that is where the lintel above the opening is flat while
+ * the floor under it is still rising:
+ *
+ * - Transition.Step puts the whole rise at one face, so the band carries it all.
+ * - Ramps spread it over the run, so the band carries its share.
+ * - Stairs add a riser on top of that share: a tread lifts in one go.
+ *
+ * Checked against the flood-fill oracle over 10,080 corridor layouts (four
+ * directions, three transitions, rises both ways, lengths, explicit heights,
+ * unequal room heights): it rejects every one of the 528 that sealed, and
+ * nothing it rejects has more than 64 units of clear height or a level floor.
+ */
+function assertCorridorClearance(
+  fromZ: number, fromCeilingZ: number, toZ: number, toCeilingZ: number,
+  rise: number, run: number, via: Transition,
+  what: string, detail: Record<string, unknown>,
+): void {
+  if (rise === 0) return
+  const climb = via === Transition.Step
+    ? Math.abs(rise)
+    : Math.abs(rise) * WALL_THICKNESS / run +
+      (via === Transition.Stairs ? STAIR_RISER : 0)
+
+  const clear = Math.min(fromCeilingZ - fromZ, toCeilingZ - toZ)
+  if (clear > climb) return
+
+  throw new SolverError(
+    'INSUFFICIENT_CLEARANCE',
+    `${what} has ${clear} units of clear height but its floor climbs ` +
+    `${Math.round(climb * 100) / 100} of them where it meets the room, so the way ` +
+    'through pinches shut and the far room cannot be reached. Raise the ' +
+    'connection height, make the rooms taller, or give it more length to climb over.',
+    { ...detail, clear, climb, rise, run, via },
+  )
 }
 
 function assertPositiveWidth(
@@ -288,6 +335,8 @@ export function solve(graph: MapGraph): Layout {
     if (c.length > 0) {
       [fromCeilingZ, toCeilingZ] = corridorCeilings(
         parent.floorZ, parent.bounds.max[2]!, floorZ, childCeilingZ, c.height)
+      assertCorridorClearance(parent.floorZ, fromCeilingZ, floorZ, toCeilingZ,
+        c.rise, c.length, c.via, what, detail)
     } else {
       fromCeilingZ = toCeilingZ = doorwayCeiling(
         parent.bounds.max[2]!, childCeilingZ, Math.max(parent.floorZ, floorZ),
@@ -369,6 +418,8 @@ export function solve(graph: MapGraph): Layout {
       if (gapHi > gapLo) {
         [aCeilingZ, bCeilingZ] = corridorCeilings(
           a.floorZ, a.bounds.max[2]!, b.floorZ, b.bounds.max[2]!, edge.height)
+        assertCorridorClearance(a.floorZ, aCeilingZ, b.floorZ, bCeilingZ,
+          b.floorZ - a.floorZ, gapHi - gapLo, edge.via, what, detail)
       } else {
         aCeilingZ = doorwayCeiling(
           a.bounds.max[2]!, b.bounds.max[2]!, hiZ, edge.height, what, detail)

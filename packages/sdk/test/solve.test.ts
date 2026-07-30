@@ -241,6 +241,54 @@ test('a corridor grazing a room it does not connect is an overlap', () => {
   expect(error.detail.through).toBe('c')
 })
 
+// A corridor whose headroom is no greater than the climb its floor makes at
+// the room's wall band pinches shut: the lintel above the opening is flat
+// while the floor under it is still rising, the two pockets of air meet along
+// an edge with no volume, and the far room is unreachable. It compiled, it
+// sealed, and you could not get to the other side — the same fault a flush
+// doorway is refused for.
+test('a step corridor with no headroom over its own climb is rejected', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 256] })
+  a.room({ name: 'b', size: [512, 512, 256] },
+    { direction: Direction.East, width: 128, length: 32, rise: 64,
+      via: Transition.Step, height: 64 })
+
+  const error = thrown(SolverError, () => solve(map.graph))
+  expect(error.code).toBe('INSUFFICIENT_CLEARANCE')
+  expect(error.detail).toMatchObject({ clear: 64, climb: 64 })
+})
+
+test('the same step is fine once the corridor is tall enough to climb it', () => {
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 256] })
+  a.room({ name: 'b', size: [512, 512, 256] },
+    { direction: Direction.East, width: 128, length: 32, rise: 64,
+      via: Transition.Step, height: 65 })
+  expect(() => solve(map.graph)).not.toThrow()
+})
+
+test('a far room too short to clear the step it stands on is rejected', () => {
+  // No explicit height needed: the clear height is the shorter room's own
+  // interior, and here that is exactly the rise.
+  const map = new CS2Map('t')
+  const a = map.room({ name: 'a', size: [512, 512, 256] })
+  a.room({ name: 'b', size: [512, 512, 64] },
+    { direction: Direction.East, width: 128, length: 32, rise: 64, via: Transition.Step })
+  expect(thrown(SolverError, () => solve(map.graph)).code).toBe('INSUFFICIENT_CLEARANCE')
+})
+
+test('a level corridor is never refused for its climb, however low', () => {
+  // The guard is about climbing, so nothing without a rise may trip it.
+  for (const height of [16, 32, 64, 192]) {
+    const map = new CS2Map('t')
+    const a = map.room({ name: 'a', size: [512, 512, 256] })
+    a.room({ name: 'b', size: [512, 512, 256] },
+      { direction: Direction.East, width: 128, length: 32, height })
+    expect(() => solve(map.graph)).not.toThrow()
+  }
+})
+
 test('a room tucked diagonally past a corridor is not an overlap', () => {
   // The corridor's side walls reach out on the cross axis but only over the
   // corridor's own height; its slabs reach above and below but only across its

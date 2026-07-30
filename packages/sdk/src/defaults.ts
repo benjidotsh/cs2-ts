@@ -13,6 +13,9 @@ export const SLAB_THICKNESS = 16
 /** How far a player can step or jump up in one go, in units. */
 export const MAX_STEP_RISE = 64
 
+/** Height of one stair riser. A flight is however many of these the rise needs. */
+export const STAIR_RISER = 8
+
 /**
  * CS2 rejects a spawn point whose origin is coplanar with the floor it stands
  * on — the player hull check reads it as stuck in world geometry, the spawn is

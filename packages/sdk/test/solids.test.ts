@@ -4,6 +4,7 @@ import { overlap1d } from '../src/geometry'
 import { CS2Map } from '../src/map'
 import { solve } from '../src/solve'
 import { subtractIntervals, toSolids } from '../src/solids'
+import { Cs2tsError } from '../src/errors'
 import { CARDINALS, Direction, Transition } from '../src/types'
 import type { Solid } from '../src/types'
 
@@ -139,8 +140,21 @@ test('a straight line reaches the connected room through its doorway, but not pa
 })
 
 test('every emitted solid has positive volume across a sweep of shapes, openings and rises', () => {
+  let built = 0
   const checkAll = (map: CS2Map) => {
-    for (const s of toSolids(solve(map.graph))) {
+    let layout
+    try {
+      layout = solve(map.graph)
+    } catch (error) {
+      // A layout the solver refuses to build emits no solids to check. The
+      // combinations it rejects are enumerated below where they are known in
+      // advance; the rest — a corridor whose clear height cannot carry its own
+      // climb, say — depend on numbers this sweep does not compute for itself.
+      if (error instanceof Cs2tsError) return
+      throw error
+    }
+    built++
+    for (const s of toSolids(layout)) {
       expect(s.max[0]! - s.min[0]!).toBeGreaterThan(0)
       expect(s.max[1]! - s.min[1]!).toBeGreaterThan(0)
       expect(s.max[2]! - s.min[2]!).toBeGreaterThan(0)
@@ -191,6 +205,10 @@ test('every emitted solid has positive volume across a sweep of shapes, openings
       }
     }
   }
+
+  // The sweep is only worth anything if most of it actually builds; a guard
+  // that started refusing layouts wholesale would leave it asserting nothing.
+  expect(built).toBeGreaterThan(300)
 })
 
 // The only brush this SDK is allowed to duplicate is the four corner columns
