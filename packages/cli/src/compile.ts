@@ -3,9 +3,12 @@ import type { Cs2Install } from './install'
 
 export type Preset = 'preview' | 'production'
 
+// `| undefined` is explicit rather than plain `?:` because the root tsconfig
+// sets exactOptionalPropertyTypes, and the CLI forwards possibly-undefined
+// commander options straight through.
 export interface LightingOptions {
-  lightmapMaxResolution?: number
-  lightmapVRadQuality?: number
+  lightmapMaxResolution?: number | undefined
+  lightmapVRadQuality?: number | undefined
 }
 
 export function compilerArgs(

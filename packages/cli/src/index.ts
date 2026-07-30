@@ -3,7 +3,7 @@ import { basename } from 'node:path'
 import { Command } from 'commander'
 import { findCs2Install, preflight } from './install'
 import { assertSafeName, emitMap, initAddon } from './commands'
-import { compileMap, launchMap } from './compile'
+import { compileMap, launchMap, type Preset } from './compile'
 import { toWindowsPath } from './paths'
 
 const program = new Command()
@@ -39,45 +39,52 @@ program.command('emit')
     console.log(`wrote ${written}`)
   })
 
-for (const [name, preset, description] of [
-  ['preview', 'preview', 'fast compile, then launch CS2'],
-  ['build', 'production', 'full compile with vis, nav and baked lighting'],
-] as const) {
-  const command = program.command(name)
-    .description(description)
-    .argument('<file>', 'map definition module')
-    .requiredOption('--addon <name>', 'addon to build into')
-    .option('--cs2-dir <path>', 'path to the CS2 install')
-
-  if (preset === 'production') {
-    command
-      .option('--lightmap-resolution <n>', 'max lightmap resolution', Number)
-      .option('--lightmap-quality <n>', 'VRAD3 quality', Number)
-  }
-
-  command.action(async (file: string, opts: {
-    addon: string; cs2Dir?: string
-    lightmapResolution?: number; lightmapQuality?: number
-  }) => {
-    assertSafeName('addon', opts.addon)
-    const install = await findCs2Install(opts.cs2Dir)
-    await preflight(install, opts.addon)
-
-    const written = await emitMap({ file, install, addon: opts.addon })
-    console.log(`wrote ${written}`)
-
-    await compileMap(install, preset, toWindowsPath(written), {
-      ...(opts.lightmapResolution !== undefined
-        ? { lightmapMaxResolution: opts.lightmapResolution } : {}),
-      ...(opts.lightmapQuality !== undefined
-        ? { lightmapVRadQuality: opts.lightmapQuality } : {}),
-    })
-
-    const mapName = basename(written, '.vmap')
-    console.log(`compiled ${mapName}`)
-    if (preset === 'preview') await launchMap(install, opts.addon, mapName)
-  })
+interface BuildOptions {
+  addon: string
+  cs2Dir?: string
+  lightmapResolution?: number
+  lightmapQuality?: number
 }
+
+/** Everything `preview` and `build` share: emit, then run the compiler. */
+async function buildAddonMap(file: string, preset: Preset, opts: BuildOptions) {
+  assertSafeName('addon', opts.addon)
+  const install = await findCs2Install(opts.cs2Dir)
+  await preflight(install, opts.addon)
+
+  const written = await emitMap({ file, install, addon: opts.addon })
+  console.log(`wrote ${written}`)
+
+  await compileMap(install, preset, toWindowsPath(written), {
+    lightmapMaxResolution: opts.lightmapResolution,
+    lightmapVRadQuality: opts.lightmapQuality,
+  })
+
+  const mapName = basename(written, '.vmap')
+  console.log(`compiled ${mapName}`)
+  return { install, mapName }
+}
+
+program.command('preview')
+  .description('fast compile, then launch CS2')
+  .argument('<file>', 'map definition module')
+  .requiredOption('--addon <name>', 'addon to build into')
+  .option('--cs2-dir <path>', 'path to the CS2 install')
+  .action(async (file: string, opts: { addon: string; cs2Dir?: string }) => {
+    const { install, mapName } = await buildAddonMap(file, 'preview', opts)
+    await launchMap(install, opts.addon, mapName)
+  })
+
+program.command('build')
+  .description('full compile with vis, nav and baked lighting')
+  .argument('<file>', 'map definition module')
+  .requiredOption('--addon <name>', 'addon to build into')
+  .option('--cs2-dir <path>', 'path to the CS2 install')
+  .option('--lightmap-resolution <n>', 'max lightmap resolution', Number)
+  .option('--lightmap-quality <n>', 'VRAD3 quality', Number)
+  .action(async (file: string, opts: BuildOptions) => {
+    await buildAddonMap(file, 'production', opts)
+  })
 
 program.parseAsync().catch((error: unknown) => {
   console.error(error instanceof Error ? error.message : String(error))
