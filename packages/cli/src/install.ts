@@ -1,4 +1,4 @@
-import { access, readFile } from 'node:fs/promises'
+import { access, readFile, realpath } from 'node:fs/promises'
 import { join } from 'node:path'
 import { addonPaths } from './addon'
 import { toWindowsPath } from './paths'
@@ -78,7 +78,10 @@ export async function findCs2Install(override?: string): Promise<Cs2Install> {
     if (!(await exists(explicit))) {
       throw new PreflightError(`CS2 directory "${explicit}" does not exist`)
     }
-    return describe(explicit)
+    // Through realpath, so that a relative path or a symlink into /mnt is
+    // judged on where it actually leads. Left as given, `--cs2-dir root` is
+    // told it "is not reachable from Windows" — of a directory that is.
+    return describe(await realpath(explicit))
   }
 
   // Almost every install is at the default path, so it is checked on its own
