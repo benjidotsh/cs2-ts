@@ -185,8 +185,8 @@ export function roomEntities(room: PlacedRoom, node: RoomNode): VmapEntity[] {
       out.push({
         classname: SPAWN_CLASS[req.team],
         origin: [
-          origin[0] - gridW / 2 + col * req.spacing,
-          origin[1] - gridH / 2 + row * req.spacing,
+          gridMinX + col * req.spacing,
+          gridMinY + row * req.spacing,
           spawnZ,
         ],
         angles: [0, yaw, 0],
