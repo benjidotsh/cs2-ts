@@ -14,11 +14,9 @@ function rampMap(via: Transition) {
 
 test('a ramp emits a wedge rising toward the higher room', () => {
   const solids = toSolids(rampMap(Transition.Ramp))
-  const wedges = solids.filter((s) => s.kind === 'wedge' && !s.inverted)
+  const wedges = solids.filter((s) => s.kind === 'wedge').filter((s) => !s.inverted)
   expect(wedges).toHaveLength(1)
   const w = wedges[0]!
-  expect(w.kind).toBe('wedge')
-  if (w.kind !== 'wedge') throw new Error('unreachable')
   expect(w.rise).toBe(Direction.North)
   expect(w.min[2]).toBe(0)
   expect(w.max[2]).toBe(64)
@@ -29,10 +27,9 @@ test('the ceiling over a ramp climbs with it, on the same slope', () => {
   // 192 at the low end to 256 at the high one, keeping 192 units of headroom
   // the whole way rather than pinching down to 128 at the top.
   const solids = toSolids(rampMap(Transition.Ramp))
-  const ceilings = solids.filter((s) => s.kind === 'wedge' && s.inverted)
+  const ceilings = solids.filter((s) => s.kind === 'wedge').filter((s) => s.inverted)
   expect(ceilings).toHaveLength(1)
   const c = ceilings[0]!
-  if (c.kind !== 'wedge') throw new Error('unreachable')
   expect(c.rise).toBe(Direction.North)
   expect([c.min[2], c.max[2]]).toEqual([192, 256])
   // Same footprint and same rise as the ramp under it, and the same 64 units
@@ -59,19 +56,15 @@ test.each([Direction.North, Direction.East, Direction.South, Direction.West])(
     a.room({ name: 'b', size: [512, 512, 192] },
       { direction, width: 128, length: 256, rise: 64, via: Transition.Ramp })
     const solids = toSolids(solve(map.graph))
-    const wedges = solids.filter((s) => s.kind === 'wedge' && !s.inverted)
+    const wedges = solids.filter((s) => s.kind === 'wedge').filter((s) => !s.inverted)
     expect(wedges).toHaveLength(1)
-    const w = wedges[0]!
-    if (w.kind !== 'wedge') throw new Error('unreachable')
-    expect(w.rise).toBe(direction)
+    expect(wedges[0]!.rise).toBe(direction)
 
     // The ceiling has to climb the same way, or the corridor pinches shut at
     // whichever end the roof failed to follow the floor to.
-    const ceilings = solids.filter((s) => s.kind === 'wedge' && s.inverted)
+    const ceilings = solids.filter((s) => s.kind === 'wedge').filter((s) => s.inverted)
     expect(ceilings).toHaveLength(1)
-    const c = ceilings[0]!
-    if (c.kind !== 'wedge') throw new Error('unreachable')
-    expect(c.rise).toBe(direction)
+    expect(ceilings[0]!.rise).toBe(direction)
   },
 )
 
